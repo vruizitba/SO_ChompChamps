@@ -35,13 +35,13 @@ typedef struct {
 } game_state_t;
 
 typedef struct {
-    sem_t drawing_sem;
-    sem_t not_drawing_sem;
-    sem_t C;
-    sem_t D;
-    sem_t E;
-    unsigned int F;
-    sem_t G[MAX_PLAYERS];
-} Sync;
+    sem_t drawing_signal;
+    sem_t not_drawing_signal;
+    sem_t accessor_queue_signal;
+    sem_t full_access_signal;
+    sem_t reader_count_protect_signal;
+    unsigned int reader_count;
+    sem_t move_signal[MAX_PLAYERS];
+} sync;
 
 #endif //COMMONS_H
