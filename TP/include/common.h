@@ -2,8 +2,8 @@
 // Created by Valentin Ruiz on 20/08/2025.
 //
 
-#ifndef COMMONS_H
-#define COMMONS_H
+#ifndef COMMON_H
+#define COMMON_H
 
 #define _POSIX_C_SOURCE 200809L
 #include <stdbool.h>
@@ -44,4 +44,4 @@ typedef struct {
     sem_t move_signal[MAX_PLAYERS];
 } sync;
 
-#endif //COMMONS_H
+#endif //COMMON_H
