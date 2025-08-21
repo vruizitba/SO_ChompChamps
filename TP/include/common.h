@@ -42,6 +42,13 @@ typedef struct {
     sem_t reader_count_protect_signal;
     unsigned int reader_count;
     sem_t move_signal[MAX_PLAYERS];
-} sync;
+} sync_t;
+
+// Shared memory utility functions
+game_state_t* allocate_game_state_shm(unsigned short width, unsigned short height);
+sync_t* allocate_sync_shm(void);
+game_state_t* attach_game_state_shm(void);
+sync_t* attach_sync_shm(void);
+void cleanup_shared_memory(void);
 
 #endif //COMMON_H
