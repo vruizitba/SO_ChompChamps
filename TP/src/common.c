@@ -14,7 +14,7 @@ game_state_t* allocate_game_state_shm(unsigned short width, unsigned short heigh
     size_t total_size = sizeof(game_state_t) + board_size;
     
     // Create shared memory object
-    int shm_fd = shm_open(SHM_STATE, O_CREAT | O_RDWR, 0666);
+    int shm_fd = shm_open(SHM_STATE, O_CREAT | O_RDWR, 0777);
     if (shm_fd == -1) {
         perror("shm_open failed for game state");
         return NULL;
@@ -44,7 +44,7 @@ sync_t* allocate_sync_shm(void) {
     size_t size = sizeof(sync_t);
     
     // Create shared memory object
-    int shm_fd = shm_open(SHM_SYNC, O_CREAT | O_RDWR, 0666);
+    int shm_fd = shm_open(SHM_SYNC, O_CREAT | O_RDWR, 0777);
     if (shm_fd == -1) {
         perror("shm_open failed for sync");
         return NULL;
@@ -70,9 +70,9 @@ sync_t* allocate_sync_shm(void) {
     return sync;
 }
 
-game_state_t* attach_game_state_shm(void) {
+game_state_t* attach_game_state_shm_readonly(void) {
     // Open existing shared memory object
-    int shm_fd = shm_open(SHM_STATE, O_RDWR, 0666);
+    int shm_fd = shm_open(SHM_STATE, O_RDONLY, 0);
     if (shm_fd == -1) {
         perror("shm_open failed for game state attachment");
         return NULL;
@@ -86,7 +86,7 @@ game_state_t* attach_game_state_shm(void) {
     }
     
     // Map the shared memory object
-    game_state_t* game_state = (game_state_t*)mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    game_state_t* game_state = (game_state_t*)mmap(NULL, shm_stat.st_size, PROT_READ, MAP_SHARED, shm_fd, 0);
     if (game_state == MAP_FAILED) {
         perror("mmap failed for game state attachment");
         return NULL;
@@ -99,7 +99,7 @@ sync_t* attach_sync_shm(void) {
     size_t size = sizeof(sync_t);
     
     // Open existing shared memory object
-    int shm_fd = shm_open(SHM_SYNC, O_RDWR, 0666);
+    int shm_fd = shm_open(SHM_SYNC, O_RDWR, 0);
     if (shm_fd == -1) {
         perror("shm_open failed for sync attachment");
         return NULL;

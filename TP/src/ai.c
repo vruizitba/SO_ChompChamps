@@ -2,6 +2,7 @@
 #include "common.h"
 #include "util.h"
 #include "sync.h"
+#include <stdio.h>
 
 static inline int in_bounds(const game_state_t *gs, int x, int y) {
     return x >= 0 && y >= 0 && x < (int)gs->width && y < (int)gs->height;

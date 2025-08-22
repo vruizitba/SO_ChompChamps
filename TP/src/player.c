@@ -15,14 +15,14 @@ int main(int argc, char *argv[]) {
     unsigned short width = atoi(argv[1]);
     unsigned short height = atoi(argv[2]);
 
-    game_state_t *game_state = attach_game_state_shm();
-    if(game_state == MAP_FAILED) {
+    game_state_t *game_state = attach_game_state_shm_readonly();
+    if(game_state == NULL) {
         perror("Failed to attach game state shared memory");
         exit(1);
     }
 
     sync_t *sync = attach_sync_shm();
-    if(sync == MAP_FAILED) {
+    if(sync == NULL) {
         perror("Failed to attach sync shared memory");
         exit(1);
     }
@@ -35,8 +35,7 @@ int main(int argc, char *argv[]) {
 
     int move_dir[2] = {0, 0};
 
-    while(choose_best_move(move_dir, game_state, sync, id) != -1){
-        sem_wait(&sync->move_signal[id]);
+    while(sem_wait(&sync->move_signal[id]) || choose_best_move(move_dir, game_state, sync, id) != -1){
         unsigned char dir_to_send = direction_to_char(move_dir);
         if(dir_to_send == 255) {
             perror("Invalid move direction");
@@ -46,7 +45,6 @@ int main(int argc, char *argv[]) {
         printf("%c", dir_to_send);
         fflush(stdout);
     }
-
     // When the loop ends, it means there are no more moves.
     // Send EOF to the master by closing stdout.
     fclose(stdout);

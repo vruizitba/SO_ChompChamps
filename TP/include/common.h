@@ -47,7 +47,7 @@ typedef struct {
 // Shared memory utility functions
 game_state_t* allocate_game_state_shm(unsigned short width, unsigned short height);
 sync_t* allocate_sync_shm(void);
-game_state_t* attach_game_state_shm(void);
+game_state_t* attach_game_state_shm_readonly(void);
 sync_t* attach_sync_shm(void);
 void cleanup_shared_memory(void);
 
