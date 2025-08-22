@@ -1,8 +1,5 @@
-//
-// Created by Valentin Ruiz on 20/08/2025.
-//
-
-#include "../include/common.h"
+#include "common.h"
+#include "sync.h"
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -31,29 +28,14 @@ game_state_t* allocate_game_state_shm(unsigned short width, unsigned short heigh
     }
     
     // Map the shared memory object
-    game_state_t* game_state = (game_state_t*)mmap(NULL, total_size, 
-                                                   PROT_READ | PROT_WRITE, 
-                                                   MAP_SHARED, shm_fd, 0);
+    game_state_t* game_state = (game_state_t*)mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (game_state == MAP_FAILED) {
         perror("mmap failed for game state");
         shm_unlink(SHM_STATE);
         return NULL;
     }
     
-    // Initialize the game state
     memset(game_state, 0, total_size);
-    game_state->width = width;
-    game_state->height = height;
-    game_state->num_players = 0;
-    game_state->finished = false;
-    
-    // Initialize the board with 1s (chocolate pieces)
-    for (int i = 0; i < width * height; i++) {
-        game_state->board[i] = 1;
-    }
-    
-    // The top-left corner (0,0) should be poison
-    game_state->board[0] = 0;
     
     return game_state;
 }
@@ -76,43 +58,11 @@ sync_t* allocate_sync_shm(void) {
     }
     
     // Map the shared memory object
-    sync_t* sync = (sync_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
-                                 MAP_SHARED, shm_fd, 0);
+    sync_t* sync = (sync_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (sync == MAP_FAILED) {
         perror("mmap failed for sync");
         shm_unlink(SHM_SYNC);
         return NULL;
-    }
-    
-    // Initialize semaphores
-    if (sem_init(&sync->drawing_signal, 1, 0) == -1 ||
-        sem_init(&sync->not_drawing_signal, 1, 1) == -1 ||
-        sem_init(&sync->accessor_queue_signal, 1, 1) == -1 ||
-        sem_init(&sync->full_access_signal, 1, 1) == -1 ||
-        sem_init(&sync->reader_count_protect_signal, 1, 1) == -1) {
-        perror("sem_init failed for sync semaphores");
-        munmap(sync, size);
-        shm_unlink(SHM_SYNC);
-        return NULL;
-    }
-    
-    // Initialize move signals for each player
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (sem_init(&sync->move_signal[i], 1, 0) == -1) {
-            perror("sem_init failed for move signal");
-            // Cleanup already initialized semaphores
-            for (int j = 0; j < i; j++) {
-                sem_destroy(&sync->move_signal[j]);
-            }
-            sem_destroy(&sync->drawing_signal);
-            sem_destroy(&sync->not_drawing_signal);
-            sem_destroy(&sync->accessor_queue_signal);
-            sem_destroy(&sync->full_access_signal);
-            sem_destroy(&sync->reader_count_protect_signal);
-            munmap(sync, size);
-            shm_unlink(SHM_SYNC);
-            return NULL;
-        }
     }
     
     sync->reader_count = 0;
@@ -136,9 +86,7 @@ game_state_t* attach_game_state_shm(void) {
     }
     
     // Map the shared memory object
-    game_state_t* game_state = (game_state_t*)mmap(NULL, shm_stat.st_size, 
-                                                   PROT_READ | PROT_WRITE, 
-                                                   MAP_SHARED, shm_fd, 0);
+    game_state_t* game_state = (game_state_t*)mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (game_state == MAP_FAILED) {
         perror("mmap failed for game state attachment");
         return NULL;
@@ -158,8 +106,7 @@ sync_t* attach_sync_shm(void) {
     }
     
     // Map the shared memory object
-    sync_t* sync = (sync_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
-                                 MAP_SHARED, shm_fd, 0);
+    sync_t* sync = (sync_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (sync == MAP_FAILED) {
         perror("mmap failed for sync attachment");
         return NULL;
