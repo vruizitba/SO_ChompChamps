@@ -2,4 +2,11 @@
 #ifndef MASTER_H
 #define MASTER_H
 
+#define WIDTH_DEFAULT 10
+#define HEIGHT_DEFAULT 10
+#define DELAY_DEFAULT 200
+#define TIMEOUT_DEFAULT 10
+#define MAX_BOARD_VALUE 9
+#define MIN_BOARD_VALUE 1
+
 #endif //MASTER_H
