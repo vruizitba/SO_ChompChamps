@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     int move_dir[2] = {0, 0};
 
-    while(sem_wait(&sync->move_signal[id]) || choose_best_move(move_dir, game_state, sync, id) != -1){
+    while(!game_state->finished || sem_wait(&sync->move_signal[id]) || choose_best_move(move_dir, game_state, sync, id) != -1){
         unsigned char dir_to_send = direction_to_char(move_dir);
         if(dir_to_send == 255) {
             perror("Invalid move direction");

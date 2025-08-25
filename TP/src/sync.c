@@ -9,7 +9,7 @@ void init_sync(sync_t *s) {
     sem_init(&s->reader_count_protect_signal, 1, 1);
     s->reader_count = 0;
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        sem_init(&s->move_signal[i], 1, 0);
+        sem_init(&s->move_signal[i], 1, 1);
     }
 }
 

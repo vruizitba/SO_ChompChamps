@@ -4,9 +4,13 @@ project(TP C)
 
 set(CMAKE_C_STANDARD 99)
 
+# Encuentra todos los archivos .c en el directorio src
+file(GLOB SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.c")
+
+# Añade los archivos encontrados al ejecutable
 add_executable(TP
         main.c
-        src/sync.c
+        ${SRC_FILES}
 )
 
 target_include_directories(TP PRIVATE
