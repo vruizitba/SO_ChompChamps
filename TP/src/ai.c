@@ -6,26 +6,6 @@
 #include <stdlib.h>   // abs
 #include <string.h>   // memset
 
-static inline int in_bounds(const game_state_t *gs, int x, int y) {
-    return x >= 0 && y >= 0 && x < (int)gs->width && y < (int)gs->height;
-}
-static inline int cell(const game_state_t *gs, int x, int y) {
-    return gs->board[y * gs->width + x];
-}
-static inline int is_free_cell(int v) {
-    return v >= 1 && v <= 9;
-}
-
-static int free_neighbors(const game_state_t *gs, int x, int y) {
-    int cnt = 0;
-    for (int k = 0; k < 8; ++k) {
-        int nx = x + DIRS[k][0];
-        int ny = y + DIRS[k][1];
-        if (in_bounds(gs, nx, ny) && is_free_cell(cell(gs, nx, ny))) cnt++;
-    }
-    return cnt;
-}
-
 static int contested_by_opponent_1step(const game_state_t *gs, int me, int x, int y) {
     for (unsigned int i = 0; i < gs->num_players; ++i) {
         if ((int)i == me) continue;
@@ -77,7 +57,7 @@ static int was_visited_put(int *vx, int *vy, unsigned char *used, int ht_mask, i
 }
 
 static int territory_potential(const game_state_t *gs, int sx, int sy, int max_depth, int max_nodes) {
-    if (!in_bounds(gs, sx, sy) || !is_free_cell(cell(gs, sx, sy))) return 0;
+    if (!in_bounds(gs, sx, sy) || !is_free_cell(get_cell(gs, sx, sy))) return 0;
 
     // colas y visitados acotados para mantener O(1) memoria
     enum { QMAX = 1024, HT = 2048 }; // HT potencia de 2
@@ -103,7 +83,7 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
             int nx = cur.x + DIRS[k][0];
             int ny = cur.y + DIRS[k][1];
             if (!in_bounds(gs, nx, ny)) continue;
-            if (!is_free_cell(cell(gs, nx, ny))) continue;
+            if (!is_free_cell(get_cell(gs, nx, ny))) continue;
             if (was_visited_put(vx, vy, used, HT - 1, nx, ny)) continue; // ya visitado
 
             if (size < QMAX - 1) { // si la cola se llena, paramos de expandir
@@ -141,7 +121,7 @@ int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
         int ny = y + DIRS[d][1];
         if (!in_bounds(gs, nx, ny)) continue;
 
-        int v = cell(gs, nx, ny);
+        int v = get_cell(gs, nx, ny);
         if (!is_free_cell(v)) continue;
 
         float score = 0.0f;
@@ -150,7 +130,7 @@ int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
         score += W_REWARD * (float)v;
 
         // movilidad local
-        int mob = free_neighbors(gs, nx, ny);
+        int mob = count_free_neighbors(gs, nx, ny);
         score += W_MOBILITY * (float)mob;
 
         // potencial de territorio (BFS acotado)
@@ -193,7 +173,7 @@ int choose_best_move_naive(int *move, const game_state_t *gs, sync_t *sync, int 
     for (int k = 0; k < 8; ++k) {
         int nx = x + DIRS[k][0];
         int ny = y + DIRS[k][1];
-        if (in_bounds(gs, nx, ny) && is_free_cell(cell(gs, nx, ny))){
+        if (in_bounds(gs, nx, ny) && is_free_cell(get_cell(gs, nx, ny))){
             move[0] = DIRS[k][0];
             move[1] = DIRS[k][1];
             reader_unlock(sync);

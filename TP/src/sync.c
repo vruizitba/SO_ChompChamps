@@ -45,3 +45,14 @@ void reader_unlock(sync_t *s) {
     }
     sem_post(&s->reader_count_protect_signal);
 }
+
+void writer_lock(sync_t *s) {
+    sem_wait(&s->accessor_queue_signal);
+    sem_wait(&s->full_access_signal);
+}
+
+void writer_unlock(sync_t *s) {
+    sem_post(&s->full_access_signal);
+    sem_post(&s->accessor_queue_signal);
+}
+

@@ -1,34 +1,24 @@
 
+//
+// Created by Valentin Ruiz on 27/08/2025.
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <fcntl.h>
-#include "master.h"
 #include <sys/wait.h>
 #include <util.h>
 #include <unistd.h>
 #include <sys/select.h>
 
+#include "master.h"
 #include "sync.h"
 #include "common.h"
+#include "util.h"
+#include "args.h"
 
-void inline static set_valid_positions(game_state_t* gs, int player_pos);
-void inline static writer_lock(sync_t* s);
-void inline static writer_unlock(sync_t* s);
-bool inline static is_valid_move(int player_pos, int new_x, int new_y , game_state_t* gs);
-bool inline static free_cell(int cell_value);
-void inline static wait_all(game_state_t* gs, pid_t view);
-void inline static print_winners(game_state_t* gs);
-void close_fds(int fds[][2], int num_players);
-
-void close_fds(int fds[][2], int num_players) {
-    for (int i = 0; i < num_players; i++) {
-        close(fds[i][0]); // Cierra el extremo de lectura
-    }
-}
-
-void inline static print_winners(game_state_t* gs) {
+void print_winners(game_state_t* gs) {
     int best_score = 0;
     int best_players[MAX_PLAYERS], count = 0;
 
@@ -115,7 +105,7 @@ void inline static print_winners(game_state_t* gs) {
     }
 }
 
-void inline static wait_all(game_state_t* gs, pid_t view) {
+void wait_all(game_state_t* gs, pid_t view) {
     int status;
     for (int i = 0; i < gs->num_players; i++) {
         waitpid(gs->players[i].pid, &status, 0);
@@ -126,90 +116,54 @@ void inline static wait_all(game_state_t* gs, pid_t view) {
     waitpid(view, &status, 0);
 }
 
-void inline static set_valid_positions(game_state_t* gs, int player_pos) {
+void set_valid_positions(game_state_t* gs, int player_pos) {
     int x, y;
     do {
         x = rand() % gs->width;
         y = rand() % gs->height;
-    } while (!free_cell(gs->board[x + y * gs->width]));
+    } while (!is_free_cell(gs->board[x + y * gs->width]));
     gs->players[player_pos].x = x;
     gs->players[player_pos].y = y;
     gs->board[x + y * gs->width] = -player_pos;
 }
 
-bool inline static free_cell(int cell_value) {
-    return (cell_value > 0 && cell_value <= 9);
-}
-
-void inline static writer_lock(sync_t* s) {
-    sem_wait(&s->accessor_queue_signal);
-    sem_wait(&s->full_access_signal);
-}
-
-void inline static writer_unlock(sync_t* s) {
-    sem_post(&s->full_access_signal);
-    sem_post(&s->accessor_queue_signal);
-}
-
-bool inline static is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs) {
-
-    return (new_x >= 0 && new_x < gs->width && new_y >= 0 && new_y < gs->height && free_cell(gs->board[new_x + new_y * gs->width]));
-
-}
-
 int main(int argc, char *argv[]) {
-    int num_players = 0;
-    int delay = DELAY_DEFAULT;
-    int seed = time(NULL);
-    int timeout = TIMEOUT_DEFAULT;
-    char* view = NULL;
-    int width = WIDTH_DEFAULT;
-    int height = HEIGHT_DEFAULT;
-
-    char* players_bins[MAX_PLAYERS];
-
-    int opt;
-    while ((opt = getopt(argc, argv, "w:h:p:d:s:t:v:")) != -1) {
-        switch (opt) {
-            case 'w':
-                width = atoi(optarg);
-                break;
-            case 'h':
-                height = atoi(optarg);
-                break;
-            case 'p':
-                while (optind < argc && (argv[optind][0] == '.' || argv[optind][0] == '/')) {
-                    players_bins[num_players++] = argv[optind++];
-                }
-                break;
-            case 'd':
-                delay = atoi(optarg);
-                break;
-            case 's':
-                seed = atoi(optarg);
-                break;
-            case 't':
-                timeout = atoi(optarg);
-                break;
-            case 'v':
-                view = optarg;
-                break;
-            default:
-                perror("Not valid argument");
-                break;
-        }
+    // Initialize args with defaults
+    args_t args = {
+        .width = WIDTH_DEFAULT,
+        .height = HEIGHT_DEFAULT,
+        .delay = DELAY_DEFAULT,
+        .timeout = TIMEOUT_DEFAULT,
+        .seed = (unsigned int)time(NULL),
+        .view_path = NULL
+    };
+    
+    // Initialize player paths to NULL
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        args.player_paths[i] = NULL;
+    }
+    
+    int num_players = parse_args(argc, argv, &args);
+    
+    if (num_players < 0) {
+        // Error parsing arguments, parse_args already printed error message
+        exit(1);
     }
 
-    game_state_t* gs = allocate_game_state_shm(width, height);
+    srand(args.seed);
 
-    srand(seed);
+    game_state_t* gs = allocate_game_state_shm(args.width, args.height);
+    if (gs == NULL) {
+        fprintf(stderr, "Failed to allocate game state shared memory\n");
+        exit(1);
+    }
 
-    gs->width = width;
-    gs->height = height;
+    gs->width = args.width;
+    gs->height = args.height;
     gs->num_players = num_players;
     gs->finished = false;
 
-    for (int i = 0; i < height * width; i++) {
+    for (int i = 0; i < args.height * args.width; i++) {
         gs->board[i] = ((rand() % MAX_BOARD_VALUE) + MIN_BOARD_VALUE);
     }
 
@@ -253,11 +207,11 @@ int main(int argc, char *argv[]) {
             close(fds[i][0]);
             close(fds[i][1]);
 
-            sprintf(width_s, "%d", width);
-            sprintf(height_s, "%d", height);
+            sprintf(width_s, "%d", args.width);
+            sprintf(height_s, "%d", args.height);
 
-            char *argv_c[] = { players_bins[i], width_s, height_s, NULL };
-            execve(players_bins[i], argv_c, NULL);
+            char *argv_c[] = { args.player_paths[i], width_s, height_s, NULL };
+            execve(args.player_paths[i], argv_c, NULL);
             perror("exec player");
             _exit(1);
         }
@@ -333,7 +287,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (difftime(time(NULL), start_time) > timeout) {
+        if (difftime(time(NULL), start_time) > args.timeout) {
             gs->finished = true;
         }
 
@@ -353,7 +307,7 @@ int main(int argc, char *argv[]) {
         start_player = (start_player + 1) % num_players;
     }
 
-    wait_all(gs, NULL); //hay que poner el PID del view aca
+    wait_all(gs, 0); // TODO: Add proper view PID when view process is implemented
 
     print_winners(gs);
 
