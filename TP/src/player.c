@@ -17,13 +17,13 @@ int main(int argc, char *argv[]) {
 
     game_state_t *game_state = attach_game_state_shm_readonly();
     if(game_state == NULL) {
-        perror("Failed to attach game state shared memory");
+        perror("Failed to attach game state shared memory to player");
         exit(1);
     }
 
     sync_t *sync = attach_sync_shm();
     if(sync == NULL) {
-        perror("Failed to attach sync shared memory");
+        perror("Failed to attach sync shared memory to player");
         exit(1);
     }
 
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     int move_dir[2] = {0, 0};
 
-    while(!game_state->finished || sem_wait(&sync->move_signal[id]) || choose_best_move(move_dir, game_state, sync, id) != -1){
+    while(sem_wait(&sync->move_signal[id]) || choose_best_move(move_dir, game_state, sync, id) != -1){
         unsigned char dir_to_send = direction_to_char(move_dir);
         if(dir_to_send == 255) {
             perror("Invalid move direction");
