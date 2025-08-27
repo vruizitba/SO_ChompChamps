@@ -25,7 +25,7 @@ COMMON_SRCS := $(SRC_DIR)/common.c $(SRC_DIR)/sync.c $(SRC_DIR)/util.c
 # Fuentes
 PLAYER_SRCS := $(SRC_DIR)/player.c $(SRC_DIR)/ai.c $(COMMON_SRCS)
 VIEW_SRCS   := $(SRC_DIR)/view.c   $(COMMON_SRCS)
-MASTER_SRCS := $(SRC_DIR)/master.c $(COMMON_SRCS)
+MASTER_SRCS := $(SRC_DIR)/master.c $(SRC_DIR)/args.c $(COMMON_SRCS)
 
 # Binaries
 PLAYER_BIN := $(BIN_DIR)/player
@@ -68,7 +68,7 @@ clean:
 
 # ---------------- Ejecución ----------------
 # Ejemplo: dos jugadores y la vista
-run: all
+run: #all
 	$(MASTER_BIN) -w 20 -h 15 -d 200 -t 10 -p $(PLAYER_BIN) $(PLAYER_BIN) -v $(VIEW_BIN)
 
 # ---------------- Dependencias ----------------
@@ -100,13 +100,13 @@ WORKDIR := /work
 docker-pull:
 	docker pull $(DOCKER_IMAGE)
 
-docker-shell: docker-pull
+docker-shell:
 	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) /bin/bash
 
-docker-build: docker-pull
+docker-build:
 	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) \
 		/bin/bash -lc 'make clean all'
 
-docker-deps: docker-pull
+docker-deps:
 	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) \
 		/bin/bash -lc 'apt-get update && apt-get install -y libncurses5-dev libncursesw5-dev && make check-ncurses'
