@@ -7,18 +7,26 @@
 #include "master.h"
 #include <sys/wait.h>
 #include <util.h>
+#include <unistd.h>
+#include <sys/select.h>
 
 #include "sync.h"
 #include "common.h"
 
 void inline static set_valid_positions(game_state_t* gs, int player_pos);
-void inline static set_nonblocking(int fd);
 void inline static writer_lock(sync_t* s);
 void inline static writer_unlock(sync_t* s);
 bool inline static is_valid_move(int player_pos, int new_x, int new_y , game_state_t* gs);
 bool inline static free_cell(int cell_value);
 void inline static wait_all(game_state_t* gs, pid_t view);
 void inline static print_winners(game_state_t* gs);
+void close_fds(int fds[][2], int num_players);
+
+void close_fds(int fds[][2], int num_players) {
+    for (int i = 0; i < num_players; i++) {
+        close(fds[i][0]); // Cierra el extremo de lectura
+    }
+}
 
 void inline static print_winners(game_state_t* gs) {
     int best_score = 0;
@@ -143,18 +151,6 @@ void inline static writer_unlock(sync_t* s) {
     sem_post(&s->accessor_queue_signal);
 }
 
-void inline static set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) {
-        perror("fcntl F_GETFL");
-        exit(1);
-    }
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        perror("fcntl F_SETFL O_NONBLOCK");
-        exit(1);
-    }
-}
-
 bool inline static is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs) {
 
     return (new_x >= 0 && new_x < gs->width && new_y >= 0 && new_y < gs->height && free_cell(gs->board[new_x + new_y * gs->width]));
@@ -172,40 +168,35 @@ int main(int argc, char *argv[]) {
 
     char* players_bins[MAX_PLAYERS];
 
-    for (int i = 1; i < argc; i++) {
-
-        if (argv[i] != NULL && argv[i][0] == '-') {
-
-            char* arg = argv[i + 1];
-            char type_arg = argv[i][1];
-
-            switch (type_arg) { // falta chequeos
+    int opt;
+    while ((opt = getopt(argc, argv, "w:h:p:d:s:t:v:")) != -1) {
+        switch (opt) {
             case 'w':
-                width = atoi(arg);
+                width = atoi(optarg);
                 break;
             case 'h':
-                height = atoi(arg);
+                height = atoi(optarg);
                 break;
             case 'p':
-                while (argv[i + 1 + num_players][0] == '.' || argv[i + 1 + num_players][0] == '/') {
-                    players_bins[num_players] = argv[i + 1 + num_players++];
+                while (optind < argc && (argv[optind][0] == '.' || argv[optind][0] == '/')) {
+                    players_bins[num_players++] = argv[optind++];
                 }
                 break;
             case 'd':
-                delay = atoi(arg);
+                delay = atoi(optarg);
                 break;
             case 's':
-                seed = atoi(arg);
+                seed = atoi(optarg);
                 break;
             case 't':
-                timeout = atoi(arg);
+                timeout = atoi(optarg);
                 break;
             case 'v':
-                view = arg;
+                view = optarg;
                 break;
             default:
                 perror("Not valid argument");
-            }
+                break;
         }
     }
 
@@ -274,7 +265,6 @@ int main(int argc, char *argv[]) {
         //codigo padre
         gs->players[i].pid = pid_p;
         close(fds[i][1]);
-        set_nonblocking(fds[i][0]);
     }
 
     int i = 0;
@@ -282,38 +272,65 @@ int main(int argc, char *argv[]) {
     time_t start_time = time(NULL);
     int n;
     char mov[1];
+    fd_set read_fds;
+    int max_fd = 0;
+
+    for (int j = 0; j < num_players; j++) {
+        if (fds[j][0] > max_fd) {
+            max_fd = fds[j][0];
+        }
+    }
+
+    int start_player = 0;
 
     while (!gs->finished) {
-        n = read(fds[i][0], mov, 1);
-        if (n == 0) {
-            gs->players[i].blocked = true;
-        } else if (n == 1) {
-            // procesa movimiento
+        FD_ZERO(&read_fds);
 
-            int processed_move = mov[0] - '0';
-
-            int new_x = gs->players[i].x + DIRS[processed_move][0];
-            int new_y = gs->players[i].y + DIRS[processed_move][1];
-
-            reader_lock(sync);
-            bool update = is_valid_move(i, new_x, new_y, gs);
-            reader_unlock(sync);
-
-            writer_lock(sync);
-            if (update) {
-                gs->players[i].x = new_x;
-                gs->players[i].y = new_y;
-                gs->players[i].score += gs->board[new_x + new_y * gs->width];
-                gs->players[i].valids++;
-                gs->board[new_x + new_y * gs->width] = -i;
-                start_time = time(NULL);
-            } else {
-                gs->players[i].invalids++;
+        for (int j = 0; j < num_players; j++) {
+            int player_idx = (start_player + j) % num_players;
+            if (!gs->players[player_idx].blocked) {
+                FD_SET(fds[player_idx][0], &read_fds);
             }
-            writer_unlock(sync);
+        }
 
-            sem_post(&sync->move_signal[i]);
+        int ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+        if (ready == -1) {
+            perror("select");
+            break;
+        }
 
+        for (int j = 0; j < num_players; j++) {
+            int player_idx = (start_player + j) % num_players;
+            if (FD_ISSET(fds[player_idx][0], &read_fds)) {
+                n = read(fds[player_idx][0], mov, 1);
+                if (n == 0) {
+                    gs->players[player_idx].blocked = true;
+                } else if (n == 1) {
+                    int processed_move = mov[0] - '0';
+
+                    int new_x = gs->players[player_idx].x + DIRS[processed_move][0];
+                    int new_y = gs->players[player_idx].y + DIRS[processed_move][1];
+
+                    reader_lock(sync);
+                    bool update = is_valid_move(player_idx, new_x, new_y, gs);
+                    reader_unlock(sync);
+
+                    writer_lock(sync);
+                    if (update) {
+                        gs->players[player_idx].x = new_x;
+                        gs->players[player_idx].y = new_y;
+                        gs->players[player_idx].score += gs->board[new_x + new_y * gs->width];
+                        gs->players[player_idx].valids++;
+                        gs->board[new_x + new_y * gs->width] = -player_idx;
+                        start_time = time(NULL);
+                    } else {
+                        gs->players[player_idx].invalids++;
+                    }
+                    writer_unlock(sync);
+
+                    sem_post(&sync->move_signal[player_idx]);
+                }
+            }
         }
 
         if (difftime(time(NULL), start_time) > timeout) {
@@ -333,13 +350,14 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        i = (i + 1) % num_players;
+        start_player = (start_player + 1) % num_players;
     }
 
     wait_all(gs, NULL); //hay que poner el PID del view aca
 
     print_winners(gs);
 
+    close_fds(fds, num_players);
     destroy_sync(sync);
     cleanup_shared_memory();
     return 0;
