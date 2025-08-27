@@ -46,7 +46,7 @@ clean:
 docker-pull:
 	docker pull $(IMG)
 	docker run -d --name $(NAME) --platform=linux/amd64 --privileged \
-	    -v "$$PWD:$(MOUNT)" -w $(WORK) \
+	    -v "$$PWD:$(MOUNT)" -w $(WORK) -e TERM=xterm-256color \
 	    -it $(IMG) tail -f /dev/null
 	docker exec -it $(NAME) apt install libncurses-dev
 

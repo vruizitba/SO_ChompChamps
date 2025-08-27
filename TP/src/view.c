@@ -4,209 +4,221 @@
 #include <stdlib.h>
 #include <locale.h>
 #include <unistd.h>
-#include <time.h>
 #include <ncurses.h>
+#include <errno.h>
+#include <string.h>
 
 #include "common.h"
 #include "sync.h"
-#include "util.h"   // in_bounds(...), DIRS[], etc.
+#include "util.h"
 
-/* ===== Helpers de tablero/estado ===== */
-static inline int board_cell(const game_state_t *gs, int x, int y) {
+/* ========= helpers ========= */
+static inline int cell_at(const game_state_t *gs, int x, int y) {
     return gs->board[y * gs->width + x];
 }
-static inline int is_free_cell_v(int v) { return v >= 1 && v <= 9; }
-static inline int owner_from_v(int v)   { return -v; } // v<=0 => -id
+static inline int is_free_v(int v){ return v>=1 && v<=9; }
+static inline int owner_from_v(int v){ return -v; }
 
-/* ===== Layout ===== */
+/* ========= layout ========= */
 typedef struct {
     int rows, cols;
-    int info_h;   // alto panel
-    int board_y;  // origen Y del tablero (en ncurses)
-    int board_x;  // origen X del tablero (en ncurses)
+    int info_h;           // panel superior
+    int board_y, board_x; // origen tablero
+    int xmul, ymul;       // “multipixel” por celda
+    int w_real, h_real;   // rectángulo del tablero (incluye borde)
 } layout_t;
 
 static void compute_layout(layout_t *ly, const game_state_t *gs) {
     getmaxyx(stdscr, ly->rows, ly->cols);
-    ly->info_h = 5 + (int)gs->num_players;   // cabecera + 1 línea por jugador
-    ly->board_y = ly->info_h + 1;
-    ly->board_x = 2;
-    if (ly->board_y >= ly->rows - 1) ly->board_y = ly->rows - 1;
+
+    ly->info_h = 3 + (int)gs->num_players;
+    if (ly->info_h > ly->rows - 4) ly->info_h = ly->rows - 4;
+    if (ly->info_h < 3) ly->info_h = 3;
+
+    int avail_h = ly->rows - ly->info_h - 2; // respiración
+    int avail_w = ly->cols - 2;
+
+    ly->xmul = (avail_w - 2) / (int)gs->width;   // -2: borde
+    ly->ymul = (avail_h - 2) / (int)gs->height;  // -2: borde
+    if (ly->xmul < 1) ly->xmul = 1;
+    if (ly->ymul < 1) ly->ymul = 1;
+
+    // celdas más grandes que antes
+    if (ly->xmul > 6) ly->xmul = 6;
+    if (ly->ymul > 3) ly->ymul = 3;
+
+    ly->w_real = (int)gs->width * ly->xmul + 2;
+    ly->h_real = (int)gs->height * ly->ymul + 2;
+
+    // centrar
+    ly->board_x = (ly->cols - ly->w_real) / 2;
+    if (ly->board_x < 0) ly->board_x = 0;
+    ly->board_y = ly->info_h;
+    if (ly->board_y + ly->h_real > ly->rows) {
+        ly->board_y = ly->rows - ly->h_real;
+        if (ly->board_y < 0) ly->board_y = 0;
+    }
 }
 
-/* ===== UI + colores ===== */
-static void ui_init(void) {
-    setlocale(LC_ALL, "");
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    curs_set(0);
-    nodelay(stdscr, FALSE);
+/* ========= UI / colores ========= */
+static int g_use_256 = 0;
+
+static void ui_init(void){
+    if (!getenv("TERM")) setenv("TERM", "xterm-256color", 1);
+    setlocale(LC_ALL,"");
+    initscr(); cbreak(); noecho(); keypad(stdscr, TRUE); curs_set(0);
     start_color();
 #ifdef NCURSES_VERSION
     use_default_colors();
 #endif
+    g_use_256 = (COLORS >= 256);
+}
+static void ui_end(void){ endwin(); }
+
+/* Paleta sobria:
+   - Recompensas: blanco tenue (sin amarillos/naranjas chillones).
+   - Por jugador: territorio vs cabeza (misma familia, cabeza más viva).
+   - Con 256 colores: usamos índices xterm-256 para tonos oscuros/claros.
+   - Fallback 8 colores: evitamos A_STANDOUT para no “apagar” el fondo.
+*/
+static void init_colors(void){
+    // Texto/estáticos
+    init_pair(1,  COLOR_WHITE,   -1);          // recompensas (dim)
+    init_pair(2,  COLOR_CYAN,    -1);          // títulos
+    init_pair(3,  COLOR_WHITE,   COLOR_BLACK); // marco
+
+    if (g_use_256) {
+        // BG territory (oscuro) y BG head (brillante) por jugador (0..8)
+        // Elegidos del cubo 256 de xterm para mantener familia y saturación.
+        const short TERR_BG[9] = { 17, 22, 52,  90,  30, 24, 250, 33,  93 }; // navy, dark-green, dark-red, dark-magenta, dark-cyan, teal, grey, blue, violet
+        const short HEAD_BG[9] = { 39, 46,196, 201,  51, 45, 255, 69, 207 }; // bright cyan, lime, bright red, hot magenta, bright cyan, spring-cyan, white, dodger blue, bright violet
+
+        for (int i=0;i<9;i++){
+            init_pair(30 + 2*i, COLOR_BLACK, TERR_BG[i]); // territorio
+            init_pair(31 + 2*i, COLOR_BLACK, HEAD_BG[i]); // cabeza
+        }
+    } else {
+        // Fallback a 8 colores:
+        const short TERR_BG8[9] = {
+            COLOR_BLUE, COLOR_GREEN, COLOR_RED, COLOR_MAGENTA,
+            COLOR_CYAN, COLOR_BLUE,  COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA
+        };
+        const short HEAD_BG8[9] = {
+            COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA, COLOR_WHITE,
+            COLOR_WHITE, COLOR_CYAN,  COLOR_WHITE,  COLOR_WHITE,  COLOR_WHITE
+        };
+        for (int i=0;i<9;i++){
+            init_pair(30 + 2*i, COLOR_BLACK, TERR_BG8[i]);
+            init_pair(31 + 2*i, COLOR_BLACK, HEAD_BG8[i]);
+        }
+    }
 }
 
-static void ui_end(void) { endwin(); }
-
-static void init_colors(void) {
-    // jugadores (1..9)
-    init_pair(1, COLOR_BLACK,   COLOR_RED);
-    init_pair(2, COLOR_BLACK,   COLOR_GREEN);
-    init_pair(3, COLOR_BLACK,   COLOR_YELLOW);
-    init_pair(4, COLOR_BLACK,   COLOR_BLUE);
-    init_pair(5, COLOR_BLACK,   COLOR_MAGENTA);
-    init_pair(6, COLOR_BLACK,   COLOR_CYAN);
-    init_pair(7, COLOR_BLACK,   COLOR_WHITE);
-    init_pair(8, COLOR_WHITE,   COLOR_RED);
-    init_pair(9, COLOR_WHITE,   COLOR_BLUE);
-
-    // auxiliares
-    init_pair(20, COLOR_WHITE,  -1);          // texto normal
-    init_pair(21, COLOR_CYAN,   -1);          // títulos
-    init_pair(22, COLOR_YELLOW, -1);          // números de recompensa
-    init_pair(23, COLOR_WHITE,  COLOR_BLACK); // borde tablero
-}
-
-/* ===== Dibujo ===== */
-static void draw_header(const game_state_t *gs) {
-    attron(COLOR_PAIR(21) | A_BOLD);
-    mvprintw(0, 2, "ChompChamps  %ux%u  players:%u  finished:%d",
+/* ========= dibujo ========= */
+static void draw_header(const game_state_t *gs){
+    attron(COLOR_PAIR(2) | A_BOLD);
+    mvprintw(0, 2, "ChompChamps   board:%ux%u   players:%u   finished:%d",
              gs->width, gs->height, gs->num_players, gs->finished);
-    attroff(COLOR_PAIR(21) | A_BOLD);
+    attroff(COLOR_PAIR(2) | A_BOLD);
+    mvprintw(2, 2, "Name           Score  OK   BAD   Pos        State");
 }
 
-static void draw_players_info(const game_state_t *gs) {
-    // ordenar por score desc (N<=9, simple burbujeo)
-    int idx[MAX_PLAYERS];
-    for (unsigned i = 0; i < gs->num_players; ++i) idx[i] = (int)i;
-    for (unsigned a = 0; a + 1 < gs->num_players; ++a)
-        for (unsigned b = a + 1; b < gs->num_players; ++b)
-            if (gs->players[idx[b]].score > gs->players[idx[a]].score) {
-                int t = idx[a]; idx[a] = idx[b]; idx[b] = t;
-            }
-
-    mvprintw(2, 2, "Players:");
-    for (unsigned r = 0; r < gs->num_players; ++r) {
-        int i = idx[r];
-        int pair = 1 + (i % 9);
-        // muestrario de color
-        attron(COLOR_PAIR(pair) | A_BOLD);
-        mvaddstr(3 + (int)r, 2, "  ");
-        attroff(COLOR_PAIR(pair) | A_BOLD);
-
-        // nombre + stats (ajustá si tus campos difieren)
-        attron(COLOR_PAIR(20));
-        mvprintw(3 + (int)r, 5, "%s  sc:%u  ok:%u  bad:%u  pos:(%u,%u)%s",
+static void draw_players_info(const game_state_t *gs){
+    for (unsigned i=0;i<gs->num_players;i++){
+        int row = 3 + (int)i;
+        int tag = 30 + (int)i*2;
+        attron(COLOR_PAIR(tag));
+        mvaddstr(row, 2, "  ");
+        attroff(COLOR_PAIR(tag));
+        mvprintw(row, 5, "%-12s  %-5u %-4u %-5u (%3u,%3u)  %s",
                  gs->players[i].name,
                  gs->players[i].score,
                  gs->players[i].valids,
                  gs->players[i].invalids,
                  gs->players[i].x, gs->players[i].y,
-                 gs->players[i].blocked ? "  [blocked]" : "");
-        attroff(COLOR_PAIR(20));
+                 gs->players[i].blocked ? "blocked" : "ok");
     }
 }
 
-static void draw_board_frame(const layout_t *ly, const game_state_t *gs) {
-    int h = (int)gs->height, w = (int)gs->width;
-    attron(COLOR_PAIR(23));
-    for (int x = 0; x <= w + 1; ++x) {
-        mvaddch(ly->board_y - 1, ly->board_x + x, (x==0||x==w+1) ? '+' : '-');
-        mvaddch(ly->board_y + h, ly->board_x + x, (x==0||x==w+1) ? '+' : '-');
+static void draw_board_frame(const layout_t *ly){
+    int x0 = ly->board_x, y0 = ly->board_y;
+    int w  = ly->w_real,  h  = ly->h_real;
+
+    attron(COLOR_PAIR(3));
+    mvaddch(y0,         x0,         ACS_ULCORNER);
+    mvaddch(y0,         x0 + w - 1, ACS_URCORNER);
+    mvaddch(y0 + h - 1, x0,         ACS_LLCORNER);
+    mvaddch(y0 + h - 1, x0 + w - 1, ACS_LRCORNER);
+    for (int x=1; x<w-1; x++){
+        mvaddch(y0,         x0 + x, ACS_HLINE);
+        mvaddch(y0 + h - 1, x0 + x, ACS_HLINE);
     }
-    for (int y = 0; y < h; ++y) {
-        mvaddch(ly->board_y + y, ly->board_x - 1, '|');
-        mvaddch(ly->board_y + y, ly->board_x + w, '|');
+    for (int y=1; y<h-1; y++){
+        mvaddch(y0 + y, x0,         ACS_VLINE);
+        mvaddch(y0 + y, x0 + w - 1, ACS_VLINE);
     }
-    attroff(COLOR_PAIR(23));
+    attroff(COLOR_PAIR(3));
 }
 
-static void draw_board_cells(const layout_t *ly, const game_state_t *gs) {
-    int h = (int)gs->height, w = (int)gs->width;
+static void fill_cell_rect(const layout_t *ly, int cx, int cy, int pair, chtype center_char, int emphasize_bold){
+    int sx = ly->board_x + 1 + cx * ly->xmul;
+    int sy = ly->board_y + 1 + cy * ly->ymul;
 
-    // celdas
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            int v = board_cell(gs, x, y);
-            if (is_free_cell_v(v)) {
-                attron(COLOR_PAIR(22) | A_DIM);
-                mvaddch(ly->board_y + y, ly->board_x + x, '0' + (v % 10));
-                attroff(COLOR_PAIR(22) | A_DIM);
-            } else {
-                int id = owner_from_v(v);
-                int pair = 1 + (id % 9);
-                attron(COLOR_PAIR(pair));
-                mvaddch(ly->board_y + y, ly->board_x + x, ' ');
-                attroff(COLOR_PAIR(pair));
-            }
+    if (emphasize_bold) attron(A_BOLD);          // NO usamos A_STANDOUT (apaga el bg en algunas TTY)
+    attron(COLOR_PAIR(pair));
+
+    for (int r=0; r<ly->ymul; r++){
+        for (int c=0; c<ly->xmul; c++){
+            int is_center = (r == ly->ymul/2) && (c == ly->xmul/2);
+            mvaddch(sy + r, sx + c, is_center ? center_char : ' ');
         }
     }
 
-    // cabezas actuales con sombreado (bloque sólido)
-    for (unsigned i = 0; i < gs->num_players; ++i) {
-        int px = gs->players[i].x;
-        int py = gs->players[i].y;
+    attroff(COLOR_PAIR(pair));
+    if (emphasize_bold) attroff(A_BOLD);
+}
+
+static void draw_board(const layout_t *ly, const game_state_t *gs){
+    // terreno / recompensas
+    for (int y=0; y<(int)gs->height; y++){
+        for (int x=0; x<(int)gs->width; x++){
+            int v = cell_at(gs, x, y);
+            if (is_free_v(v)) {
+                attron(COLOR_PAIR(1) | A_DIM);
+                fill_cell_rect(ly, x, y, 1, (chtype)('0' + (v % 10)), 0);
+                attroff(COLOR_PAIR(1) | A_DIM);
+            } else {
+                int id   = owner_from_v(v);
+                int base = 30 + id*2;    // territorio
+                fill_cell_rect(ly, x, y, base, ' ', 0);
+            }
+        }
+    }
+    // cabezas (rellenas, mismo tono pero más vivo/saturado)
+    for (unsigned i=0; i<gs->num_players; i++){
+        int px = gs->players[i].x, py = gs->players[i].y;
         if (!in_bounds(gs, px, py)) continue;
-        int pair = 1 + ((int)i % 9);
-        attron(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-        mvaddch(ly->board_y + py, ly->board_x + px, ACS_BLOCK);
-        attroff(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
+        int head = 31 + (int)i*2;        // par de cabeza
+        fill_cell_rect(ly, px, py, head, ' ', 1); // relleno completo; bold para “levantar” el tono
     }
 }
 
-/* Cubo “rodando”: 3 frames breves con ACS */
-static void animate_cube_roll(const layout_t *ly,
-                              int from_x, int from_y,
-                              int to_x, int to_y,
-                              int pair) {
-    const chtype frames[3] = { ACS_CKBOARD, ACS_DIAMOND, ACS_BLOCK };
-    int fx = ly->board_x + from_x, fy = ly->board_y + from_y;
-    int tx = ly->board_x + to_x,   ty = ly->board_y + to_y;
-
-    attron(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    mvaddch(fy, fx, frames[0]);
-    attroff(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    refresh(); napms(18);
-
-    int mx = fx + ((tx - fx) > 0 ? 1 : ((tx - fx) < 0 ? -1 : 0));
-    int my = fy + ((ty - fy) > 0 ? 1 : ((ty - fy) < 0 ? -1 : 0));
-    attron(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    mvaddch(my, mx, frames[1]);
-    attroff(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    refresh(); napms(18);
-
-    attron(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    mvaddch(ty, tx, frames[2]);
-    attroff(COLOR_PAIR(pair) | A_BOLD | A_STANDOUT);
-    refresh(); napms(18);
-}
-
-int main(int argc, char **argv) {
-    if (argc < 3) {
-        fprintf(stderr, "usage: %s <width> <height>\n", argv[0]);
-        return 1;
-    }
+/* ========= main loop ========= */
+int main(int argc, char **argv){
+    (void)argc; (void)argv;
 
     game_state_t *gs = attach_game_state_shm_readonly();
-    if (!gs) { perror("attach game_state"); return 1; }
+    if (!gs){ perror("attach game_state"); return 1; }
     sync_t *sync = attach_sync_shm();
-    if (!sync) { perror("attach sync"); return 1; }
+    if (!sync){ perror("attach sync"); return 1; }
 
     ui_init();
     init_colors();
 
     layout_t ly;
-    int last_have = 0;
-    int last_x[MAX_PLAYERS], last_y[MAX_PLAYERS];
-    for (int i = 0; i < MAX_PLAYERS; ++i) last_x[i] = last_y[i] = -1;
 
-    for (;;) {
-        /* Espera a que el master anuncie cambios */
+    for (;;){
         sem_wait(&sync->drawing_signal);
-
         reader_lock(sync);
 
         int finished = gs->finished;
@@ -215,41 +227,14 @@ int main(int argc, char **argv) {
 
         draw_header(gs);
         draw_players_info(gs);
-        draw_board_frame(&ly, gs);
-        draw_board_cells(&ly, gs);
-
-        /* Animar solo jugadores que cambiaron de celda desde el último frame */
-        if (last_have) {
-            for (unsigned i = 0; i < gs->num_players; ++i) {
-                int cx = gs->players[i].x;
-                int cy = gs->players[i].y;
-                if (last_x[i] >= 0 && last_y[i] >= 0 &&
-                    (cx != last_x[i] || cy != last_y[i])) {
-                    int pair = 1 + ((int)i % 9);
-                    animate_cube_roll(&ly, last_x[i], last_y[i], cx, cy, pair);
-                }
-            }
-        }
-        for (unsigned i = 0; i < gs->num_players; ++i) {
-            last_x[i] = gs->players[i].x;
-            last_y[i] = gs->players[i].y;
-        }
-        last_have = 1;
+        draw_board_frame(&ly);
+        draw_board(&ly, gs);
 
         reader_unlock(sync);
-
         refresh();
-
-        /* Avisar al master que ya imprimimos */
         sem_post(&sync->not_drawing_signal);
 
         if (finished) break;
-
-        // escape manual (no bloquea el handshake)
-        nodelay(stdscr, TRUE);
-        int ch = getch();
-        nodelay(stdscr, FALSE);
-        if (ch == 'q' || ch == 'Q') break;
     }
 
     ui_end();

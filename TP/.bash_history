@@ -124,3 +124,29 @@ exit
 ./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -s 123
 ./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view.o -s 123
 exit
+make clean
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view.o -s 123
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view.o -s 123
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+make host-all
+make clean
+make host-all
+gcc -std=c99 -O2 -Wall -Wextra -pedantic -Iinclude -o view_joni view_joni.c src/common.c src/sync.c src/util.c -pthread -lrt -lncurses
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view_joni -s 123
+make clean
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view_joni -s 123
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view_joni -s 123
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./view_joni -s 123
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+make clean
+exit
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+make clean
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+exit
