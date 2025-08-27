@@ -1,112 +1,74 @@
-# ----------------------------
-# ChompChamps - Makefile (C99)
-# ----------------------------
+# ========= Config =========
+IMG   := agodio/itba-so-multi-platform:3.0
+NAME  := os-ram
+MOUNT := /root
+WORK  := $(MOUNT)    # compilo en /root (tu carpeta está montada ahí)
 
-# Directorios
+CC      := gcc
+CSTD    := -std=c99
+OPT     := -O2
+WARN    := -Wall -Wextra -pedantic
+CPPFLAGS:= -Iinclude
+CFLAGS  := $(CSTD) $(OPT) $(WARN) $(CPPFLAGS)
+LDLIBS  := -pthread -lrt
+NCURSES := -lncurses
+
 SRC_DIR := src
-INC_DIR := include
-BIN_DIR := bin
-BUILD_DIR := build
+OUT_DIR := bin
 
-# Toolchain
-CC := gcc
-CSTD := -std=c99
-WARN := -Wall -Wextra -pedantic
-OPT := -O2
-CPPFLAGS := -I$(INC_DIR)
-CFLAGS   := $(CSTD) $(WARN) $(OPT) $(CPPFLAGS)
-LDFLAGS  :=
-LDLIBS_COMMON := -pthread -lrt
-LDLIBS_NCURSES := -lncurses
-
-# Archivos comunes
 COMMON_SRCS := $(SRC_DIR)/common.c $(SRC_DIR)/sync.c $(SRC_DIR)/util.c
-
-# Fuentes
+MASTER_SRCS := $(SRC_DIR)/master.c $(COMMON_SRCS) $(wildcard $(SRC_DIR)/args.c)
 PLAYER_SRCS := $(SRC_DIR)/player.c $(SRC_DIR)/ai.c $(COMMON_SRCS)
 VIEW_SRCS   := $(SRC_DIR)/view.c   $(COMMON_SRCS)
-MASTER_SRCS := $(SRC_DIR)/master.c $(SRC_DIR)/args.c $(COMMON_SRCS)
 
-# Binaries
-PLAYER_BIN := $(BIN_DIR)/player
-VIEW_BIN   := $(BIN_DIR)/view
-MASTER_BIN := $(BIN_DIR)/master
+MASTER_BIN := $(OUT_DIR)/master
+PLAYER_BIN := $(OUT_DIR)/player
+VIEW_BIN   := $(OUT_DIR)/view
 
-# Objetos
-PLAYER_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(PLAYER_SRCS))
-VIEW_OBJS   := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(VIEW_SRCS))
-MASTER_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(MASTER_SRCS))
+# ========= Targets de alto nivel (siempre en host) =========
+.PHONY: all master player view clean docker-pull docker-start host-all host-master host-player host-view
 
-# -------------- Targets --------------
-.PHONY: all clean run deps check-ncurses docker-pull docker-shell docker-build docker-deps
+all: master player view
 
-all: $(PLAYER_BIN) $(VIEW_BIN) $(MASTER_BIN)
+master: docker-start
+	docker exec -it $(NAME) make -C $(WORK) host-master
 
-# Player
-$(PLAYER_BIN): $(PLAYER_OBJS) | $(BIN_DIR)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS_COMMON)
+player: docker-start
+	docker exec -it $(NAME) make -C $(WORK) host-player
 
-# View
-$(VIEW_BIN): $(VIEW_OBJS) | $(BIN_DIR)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS_COMMON) $(LDLIBS_NCURSES)
-
-# Master
-$(MASTER_BIN): $(MASTER_OBJS) | $(BIN_DIR)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS_COMMON)
-
-# Objetos
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BIN_DIR) $(BUILD_DIR):
-	@mkdir -p $@
+view: docker-start
+	docker exec -it $(NAME) make -C $(WORK) host-view
 
 clean:
-	@echo "Limpieza..."
-	@rm -rf $(BUILD_DIR) $(BIN_DIR)
+	@rm -rf $(OUT_DIR)
 
-# ---------------- Ejecución ----------------
-# Ejemplo: dos jugadores y la vista
-run: #all
-	$(MASTER_BIN) -w 20 -h 15 -d 200 -t 10 -p $(PLAYER_BIN) $(PLAYER_BIN) -v $(VIEW_BIN)
-
-# ---------------- Dependencias ----------------
-deps: check-ncurses
-	@echo "Dependencias OK."
-
-check-ncurses:
-	@echo "Chequeando ncurses..."
-	@printf '#include <ncurses.h>\nint main(){initscr();endwin();return 0;}\n' \
-	  | $(CC) $(CSTD) -x c - -o /tmp/.ncurses_check -lncurses >/dev/null 2>&1 \
-	&& { echo "  - ncurses OK"; rm -f /tmp/.ncurses_check; } \
-	|| { echo "  - ncurses NO encontrado. Intentando instalar..."; \
-	     if command -v apt-get >/dev/null 2>&1; then \
-	       if command -v sudo >/dev/null 2>&1; then \
-	          sudo apt-get update && sudo apt-get install -y libncurses5-dev libncursesw5-dev; \
-	       else \
-	          apt-get update && apt-get install -y libncurses5-dev libncursesw5-dev; \
-	       fi; \
-	     else \
-	       echo "  * apt-get no disponible. Instalalo dentro del container (make docker-deps)."; \
-	       exit 1; \
-	     fi; \
-	   }
-
-# ---------------- Docker / Container ----------------
-DOCKER_IMAGE := agodio/itba-so-multi-platform:3.0
-WORKDIR := /work
-
+# ======== Docker (persistente) ========
 docker-pull:
-	docker pull $(DOCKER_IMAGE)
+	docker pull $(IMG)
+	docker run -d --name $(NAME) --platform=linux/amd64 --privileged \
+	    -v "$$PWD:$(MOUNT)" -w $(WORK) \
+	    -it $(IMG) tail -f /dev/null
+	docker exec -it $(NAME) apt install libncurses-dev
 
-docker-shell:
-	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) /bin/bash
+docker-start:
+	docker start $(NAME)
 
-docker-build:
-	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) \
-		/bin/bash -lc 'make clean all'
+# ========= Reglas "host-" (se ejecutan dentro del container) =========
+# -> NO llaman a docker; compilan nativo usando gcc del container
+host-all: host-master host-player host-view
 
-docker-deps:
-	docker run --rm -it -v "$(PWD)":$(WORKDIR) -w $(WORKDIR) $(DOCKER_IMAGE) \
-		/bin/bash -lc 'apt-get update && apt-get install -y libncurses5-dev libncursesw5-dev && make check-ncurses'
+host-master: $(MASTER_BIN)
+host-player: $(PLAYER_BIN)
+host-view:   $(VIEW_BIN)
+
+$(OUT_DIR):
+	@mkdir -p $@
+
+$(MASTER_BIN): $(MASTER_SRCS) | $(OUT_DIR)
+	$(CC) $(CFLAGS) -o $@ $(MASTER_SRCS) $(LDLIBS)
+
+$(PLAYER_BIN): $(PLAYER_SRCS) | $(OUT_DIR)
+	$(CC) $(CFLAGS) -o $@ $(PLAYER_SRCS) $(LDLIBS)
+
+$(VIEW_BIN): $(VIEW_SRCS) | $(OUT_DIR)
+	$(CC) $(CFLAGS) -o $@ $(VIEW_SRCS) $(LDLIBS) $(NCURSES)

@@ -191,6 +191,9 @@ int main(int argc, char *argv[]) {
     char width_s[6]; // ver bien si poner 6 u otra cosa
     char height_s[6];
 
+    sprintf(width_s, "%d", args.width);
+    sprintf(height_s, "%d", args.height);
+
     for (int i = 0; i < num_players; i++) {
 
         if (pipe(fds[i]) == -1) {
@@ -214,9 +217,6 @@ int main(int argc, char *argv[]) {
 
             close(fds[i][0]);
             close(fds[i][1]);
-
-            sprintf(width_s, "%d", args.width);
-            sprintf(height_s, "%d", args.height);
 
             char *argv_c[] = { args.player_paths[i], width_s, height_s, NULL };
             execve(args.player_paths[i], argv_c, NULL);
