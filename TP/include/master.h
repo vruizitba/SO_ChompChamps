@@ -33,4 +33,11 @@ void wait_all(game_state_t* gs, pid_t view);
  */
 void set_valid_positions(game_state_t* gs, int player_pos);
 
+/**
+ * Closes all file descriptors in the provided array
+ * @param fds: array of file descriptor pairs
+ * @param num_players: number of players (size of fds array)
+ */
+void close_fds(int fds[][2], int num_players);
+
 #endif //MASTER_H

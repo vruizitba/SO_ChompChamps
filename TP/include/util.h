@@ -77,9 +77,11 @@ int count_free_neighbors(const game_state_t *gs, int x, int y);
 bool is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs);
 
 /**
- * Sets a file descriptor to non-blocking mode
- * @param fd: file descriptor to modify
+ * Calculates the time difference in milliseconds between two timespecs
+ * @param start: starting timespec
+ * @param end: ending timespec
+ * @return: difference in milliseconds
  */
-void set_nonblocking(int fd);
+long calculate_time_diff_ms(struct timespec start, struct timespec end);
 
 #endif //UTIL_H

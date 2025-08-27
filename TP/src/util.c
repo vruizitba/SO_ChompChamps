@@ -58,15 +58,8 @@ bool is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs) {
     return is_free_cell(cell_value);
 }
 
-void set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) {
-        perror("fcntl F_GETFL");
-        exit(1);
-    }
-    
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        perror("fcntl F_SETFL");
-        exit(1);
-    }
+long calculate_time_diff_ms(struct timespec start, struct timespec end) {
+    long seconds = end.tv_sec - start.tv_sec;
+    long nanoseconds = end.tv_nsec - start.tv_nsec;
+    return seconds * 1000 + nanoseconds / 1000000;
 }

@@ -113,7 +113,9 @@ void wait_all(game_state_t* gs, pid_t view) {
         printf("%s (PID %d) - Score: %u, Valids: %u, Invalids: %u, Exit code: %d\n", gs->players[i].name, gs->players[i].pid, gs->players[i].score, gs->players[i].valids, gs->players[i].invalids, status);
     }
 
-    waitpid(view, &status, 0);
+    if (view != -1) {
+        waitpid(view, &status, 0);
+    }
 }
 
 void set_valid_positions(game_state_t* gs, int player_pos) {
@@ -125,6 +127,12 @@ void set_valid_positions(game_state_t* gs, int player_pos) {
     gs->players[player_pos].x = x;
     gs->players[player_pos].y = y;
     gs->board[x + y * gs->width] = -player_pos;
+}
+
+void close_fds(int fds[][2], int num_players) {
+    for (int i = 0; i < num_players; i++) {
+        close(fds[i][0]);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -221,13 +229,33 @@ int main(int argc, char *argv[]) {
         close(fds[i][1]);
     }
 
-    int i = 0;
+    pid_t pid_v = -1;
+
+    if (args.view_path != NULL) {
+
+        pid_v = fork();
+
+        if (pid_v < 0) {
+            perror("fork v");
+            return 1;
+        }
+
+        if (pid_v == 0) {
+            char *argv_c[] = { args.view_path, width_s, height_s, NULL };
+            execve(args.view_path, argv_c, NULL);
+            perror("exec view");
+            _exit(1);
+        }
+    }
+
     int blocked_players;
     time_t start_time = time(NULL);
     int n;
     char mov[1];
     fd_set read_fds;
     int max_fd = 0;
+    int start_player = 0;
+    struct timespec last_view_update, current_time;
 
     for (int j = 0; j < num_players; j++) {
         if (fds[j][0] > max_fd) {
@@ -235,7 +263,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    int start_player = 0;
+    if (args.view_path != NULL) {
+        sem_post(&sync->drawing_signal); // se podría poner en una funcion star_view
+        sem_wait(&sync->not_drawing_signal);
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &last_view_update);
 
     while (!gs->finished) {
         FD_ZERO(&read_fds);
@@ -291,6 +324,15 @@ int main(int argc, char *argv[]) {
             gs->finished = true;
         }
 
+        if (args.view_path != NULL) {
+            clock_gettime(CLOCK_MONOTONIC, &current_time);
+            if (calculate_time_diff_ms(last_view_update, current_time) >= args.delay) {
+                sem_post(&sync->drawing_signal);
+                sem_wait(&sync->not_drawing_signal);
+                clock_gettime(CLOCK_MONOTONIC, &last_view_update);
+            }
+        }
+
         blocked_players = 0;
 
         if (!gs->finished) {
@@ -307,7 +349,7 @@ int main(int argc, char *argv[]) {
         start_player = (start_player + 1) % num_players;
     }
 
-    wait_all(gs, 0); // TODO: Add proper view PID when view process is implemented
+    wait_all(gs, pid_v);
 
     print_winners(gs);
 
