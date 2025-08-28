@@ -237,6 +237,14 @@ int main(int argc, char **argv){
         if (finished) break;
     }
 
+    nodelay(stdscr, FALSE); // aseguramos modo bloqueante
+    attron(COLOR_PAIR(2) | A_BOLD);
+    mvprintw(ly.board_y + ly.h_real + 1, ly.board_x,
+             "Juego finalizado. Pulse cualquier tecla para salir...");
+    attroff(COLOR_PAIR(2) | A_BOLD);
+    refresh();
+    getch();
+
     ui_end();
     return 0;
 }

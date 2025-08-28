@@ -293,7 +293,7 @@ int main(int argc, char *argv[]) {
                 if (n == 0) {
                     gs->players[player_idx].blocked = true;
                 } else if (n == 1) {
-                    int processed_move = mov[0] - '0';
+                    int processed_move = mov[0];
 
                     int new_x = gs->players[player_idx].x + DIRS[processed_move][0];
                     int new_y = gs->players[player_idx].y + DIRS[processed_move][1];
@@ -326,11 +326,12 @@ int main(int argc, char *argv[]) {
 
         if (args.view_path != NULL) {
             clock_gettime(CLOCK_MONOTONIC, &current_time);
-            if (calculate_time_diff_ms(last_view_update, current_time) >= args.delay) {
-                sem_post(&sync->drawing_signal);
-                sem_wait(&sync->not_drawing_signal);
-                clock_gettime(CLOCK_MONOTONIC, &last_view_update);
-            }
+            sem_post(&sync->drawing_signal);
+            sem_wait(&sync->not_drawing_signal);
+            clock_gettime(CLOCK_MONOTONIC, &last_view_update);
+
+            struct timespec ts = { .tv_sec = args.delay / 1000, .tv_nsec = (args.delay % 1000) * 1000000L };
+            nanosleep(&ts, NULL);
         }
 
         blocked_players = 0;
