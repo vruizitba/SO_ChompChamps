@@ -158,3 +158,20 @@ make host-all
 ./bin/master -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
 ./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
 exit
+make host-all
+make clean
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+make clean
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+make clean
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+exit

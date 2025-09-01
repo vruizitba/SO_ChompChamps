@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
 
     clock_gettime(CLOCK_MONOTONIC, &last_view_update);
 
-    while (!gs->finished) {
+    do{
         FD_ZERO(&read_fds);
 
         for (int j = 0; j < num_players; j++) {
@@ -322,21 +322,11 @@ int main(int argc, char *argv[]) {
         }
 
         if (difftime(time(NULL), start_time) > args.timeout) {
+            writer_lock(sync);
             gs->finished = true;
+            writer_unlock(sync);
         }
-
-        if (args.view_path != NULL) {
-            clock_gettime(CLOCK_MONOTONIC, &current_time);
-            sem_post(&sync->drawing_signal);
-            sem_wait(&sync->not_drawing_signal);
-            clock_gettime(CLOCK_MONOTONIC, &last_view_update);
-
-            struct timespec ts = { .tv_sec = args.delay / 1000, .tv_nsec = (args.delay % 1000) * 1000000L };
-            nanosleep(&ts, NULL);
-        }
-
-        blocked_players = 0;
-
+        
         if (!gs->finished) {
             for (int j = 0; j < num_players; j++) {
                 if (gs->players[j].blocked) {
@@ -344,15 +334,25 @@ int main(int argc, char *argv[]) {
                 }
             }
             if (blocked_players == num_players) {
+                writer_lock(sync);
                 gs->finished = true;
+                writer_unlock(sync);
             }
         }
 
-        start_player = (start_player + 1) % num_players;
-    }
+        if (args.view_path != NULL) {
+            sem_post(&sync->drawing_signal);
+            sem_wait(&sync->not_drawing_signal);
 
-    sem_post(&sync->drawing_signal);
-    sem_wait(&sync->not_drawing_signal);
+            struct timespec ts = { .tv_sec = args.delay / 1000, .tv_nsec = (args.delay % 1000) * 1000000L };
+            nanosleep(&ts, NULL);
+        }
+
+        blocked_players = 0;
+
+        start_player = (start_player + 1) % num_players;
+    }while(!gs->finished);
+
     wait_all(gs, pid_v);
 
     print_winners(gs);
