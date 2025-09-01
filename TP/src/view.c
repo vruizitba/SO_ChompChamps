@@ -13,10 +13,7 @@
 #include "util.h"
 
 /* ========= helpers ========= */
-static inline int cell_at(const game_state_t *gs, int x, int y) {
-    return gs->board[y * gs->width + x];
-}
-static inline int is_free_v(int v){ return v>=1 && v<=9; }
+
 static inline int owner_from_v(int v){ return -v; }
 
 /* ========= layout ========= */
@@ -32,8 +29,10 @@ static void compute_layout(layout_t *ly, const game_state_t *gs) {
     getmaxyx(stdscr, ly->rows, ly->cols);
 
     ly->info_h = 3 + (int)gs->num_players;
-    if (ly->info_h > ly->rows - 4) ly->info_h = ly->rows - 4;
-    if (ly->info_h < 3) ly->info_h = 3;
+    if (ly->info_h > ly->rows - 4)
+        ly->info_h = ly->rows - 4;
+    if (ly->info_h < 3)
+        ly->info_h = 3;
 
     int avail_h = ly->rows - ly->info_h - 2; // respiración
     int avail_w = ly->cols - 2;
@@ -85,7 +84,7 @@ static void init_colors(void){
     // Texto/estáticos
     init_pair(1,  COLOR_WHITE,   -1);          // recompensas (dim)
     init_pair(2,  COLOR_CYAN,    -1);          // títulos
-    init_pair(3,  COLOR_WHITE,   COLOR_BLACK); // marco
+    init_pair(3,  COLOR_BLACK,  COLOR_WHITE); // marco
 
     if (g_use_256) {
         // BG territory (oscuro) y BG head (brillante) por jugador (0..8)
@@ -182,8 +181,8 @@ static void draw_board(const layout_t *ly, const game_state_t *gs){
     // terreno / recompensas
     for (int y=0; y<(int)gs->height; y++){
         for (int x=0; x<(int)gs->width; x++){
-            int v = cell_at(gs, x, y);
-            if (is_free_v(v)) {
+            int v = get_cell(gs, x, y);
+            if (is_free_cell(v)) {
                 attron(COLOR_PAIR(1) | A_DIM);
                 fill_cell_rect(ly, x, y, 1, (chtype)('0' + (v % 10)), 0);
                 attroff(COLOR_PAIR(1) | A_DIM);
@@ -217,11 +216,13 @@ int main(int argc, char **argv){
 
     layout_t ly;
 
-    for (;;){
+    bool finished;
+
+    do {
         sem_wait(&sync->drawing_signal);
         reader_lock(sync);
 
-        int finished = gs->finished;
+        finished = gs->finished;
         compute_layout(&ly, gs);
         clear();
 
@@ -234,8 +235,8 @@ int main(int argc, char **argv){
         refresh();
         sem_post(&sync->not_drawing_signal);
 
-        if (finished) break;
-    }
+    } while (!finished);
+
 
     nodelay(stdscr, FALSE); // aseguramos modo bloqueante
     attron(COLOR_PAIR(2) | A_BOLD);

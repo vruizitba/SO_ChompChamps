@@ -150,3 +150,11 @@ make clean
 make host-all
 ./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
 exit
+make clean
+make host-all
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+ make clean
+make host-all
+./bin/master -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+./ChompChamps -w 40 -h 12 -d 20 -t 100 -p ./bin/player ./bin/player -v ./bin/view -s 123
+exit

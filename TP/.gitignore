@@ -26,4 +26,4 @@ compile_commands.json
 
 .vscode/*
 
-/bin/*
+/bin

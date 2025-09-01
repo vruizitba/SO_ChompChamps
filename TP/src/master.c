@@ -110,10 +110,11 @@ void wait_all(game_state_t* gs, pid_t view) {
     for (int i = 0; i < gs->num_players; i++) {
         waitpid(gs->players[i].pid, &status, 0);
 
-        printf("%s (PID %d) - Score: %u, Valids: %u, Invalids: %u, Exit code: %d\n", gs->players[i].name, gs->players[i].pid, gs->players[i].score, gs->players[i].valids, gs->players[i].invalids, status);
+       printf("%s (PID %d) - Score: %u, Valids: %u, Invalids: %u, Exit code: %d\n", gs->players[i].name, gs->players[i].pid, gs->players[i].score, gs->players[i].valids, gs->players[i].invalids, status);
     }
 
     if (view != -1) {
+
         waitpid(view, &status, 0);
     }
 }
