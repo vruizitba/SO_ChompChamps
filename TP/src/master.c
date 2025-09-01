@@ -110,7 +110,7 @@ void wait_all(game_state_t* gs, pid_t view) {
     for (int i = 0; i < gs->num_players; i++) {
         waitpid(gs->players[i].pid, &status, 0);
 
-       printf("%s (PID %d) - Score: %u, Valids: %u, Invalids: %u, Exit code: %d\n", gs->players[i].name, gs->players[i].pid, gs->players[i].score, gs->players[i].valids, gs->players[i].invalids, status);
+        //printf("%s (PID %d) - Score: %u, Valids: %u, Invalids: %u, Exit code: %d\n", gs->players[i].name, gs->players[i].pid, gs->players[i].score, gs->players[i].valids, gs->players[i].invalids, status);
     }
 
     if (view != -1) {
@@ -351,6 +351,8 @@ int main(int argc, char *argv[]) {
         start_player = (start_player + 1) % num_players;
     }
 
+    sem_post(&sync->drawing_signal);
+    sem_wait(&sync->not_drawing_signal);
     wait_all(gs, pid_v);
 
     print_winners(gs);
