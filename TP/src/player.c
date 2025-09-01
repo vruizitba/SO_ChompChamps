@@ -17,13 +17,13 @@ int main(int argc, char *argv[]) {
 
     game_state_t *game_state = attach_game_state_shm_readonly();
     if(game_state == NULL) {
-        perror("Failed to attach game state shared memory");
+        perror("Failed to attach game state shared memory to player");
         exit(1);
     }
 
     sync_t *sync = attach_sync_shm();
     if(sync == NULL) {
-        perror("Failed to attach sync shared memory");
+        perror("Failed to attach sync shared memory to player");
         exit(1);
     }
 

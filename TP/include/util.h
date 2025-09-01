@@ -1,6 +1,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdbool.h>
+#include "common.h"
 
 static const int DIRS[8][2] = {
     {0,-1},   // UP
@@ -29,5 +31,57 @@ static const int DIRS[8][2] = {
  * @return: unsigned char from 0-7, or 255 if invalid direction
  */
 unsigned char direction_to_char(const int direction[2]);
+
+/**
+ * Checks if a cell value represents a free chocolate piece
+ * @param cell_value: value from the game board
+ * @return: true if cell is free (1-9), false otherwise
+ */
+bool is_free_cell(int cell_value);
+
+/**
+ * Checks if coordinates are within game board bounds
+ * @param gs: pointer to game state
+ * @param x: x coordinate
+ * @param y: y coordinate
+ * @return: true if coordinates are valid, false otherwise
+ */
+bool in_bounds(const game_state_t *gs, int x, int y);
+
+/**
+ * Safely gets a cell value from the game board
+ * @param gs: pointer to game state
+ * @param x: x coordinate
+ * @param y: y coordinate
+ * @return: cell value at the given coordinates
+ */
+int get_cell(const game_state_t *gs, int x, int y);
+
+/**
+ * Counts the number of free neighboring cells around a position
+ * @param gs: pointer to game state
+ * @param x: x coordinate
+ * @param y: y coordinate
+ * @return: number of free neighbors (0-8)
+ */
+int count_free_neighbors(const game_state_t *gs, int x, int y);
+
+/**
+ * Validates if a move is legal for a player
+ * @param player_pos: player index
+ * @param new_x: target x coordinate
+ * @param new_y: target y coordinate  
+ * @param gs: game state
+ * @return: true if move is valid, false otherwise
+ */
+bool is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs);
+
+/**
+ * Calculates the time difference in milliseconds between two timespecs
+ * @param start: starting timespec
+ * @param end: ending timespec
+ * @return: difference in milliseconds
+ */
+long calculate_time_diff_ms(struct timespec start, struct timespec end);
 
 #endif //UTIL_H
