@@ -56,8 +56,11 @@ static int was_visited_put(int *vx, int *vy, unsigned char *used, int ht_mask, i
     return 1;
 }
 
-static int territory_potential(const game_state_t *gs, int sx, int sy, int max_depth, int max_nodes) {
-    if (!in_bounds(gs, sx, sy) || !is_free_cell(get_cell(gs, sx, sy))) return 0;
+static int territory_potential(const game_state_t *gs, int sx, int sy, int max_depth, int max_nodes, int *total_value) {
+    if (!in_bounds(gs, sx, sy) || !is_free_cell(get_cell(gs, sx, sy))) {
+        if (total_value) *total_value = 0;
+        return 0;
+    }
 
     // colas y visitados acotados para mantener O(1) memoria
     enum { QMAX = 1024, HT = 2048 }; // HT potencia de 2
@@ -72,10 +75,17 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
     q[tail] = (qnode_t){ sx, sy, 0 }; tail = (tail + 1) % QMAX; size++;
 
     int visited = 0, expanded = 0;
+    int value_sum = 0;
 
     while (size > 0 && expanded < max_nodes) {
         qnode_t cur = q[head]; head = (head + 1) % QMAX; size--;
         visited++;
+        
+        // Accumulate the value of this cell
+        int cell_value = get_cell(gs, cur.x, cur.y);
+        if (is_free_cell(cell_value)) {
+            value_sum += cell_value;
+        }
 
         if (cur.d >= max_depth) continue;
 
@@ -94,6 +104,8 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
             if (expanded >= max_nodes) break;
         }
     }
+    
+    if (total_value) *total_value = value_sum;
     return visited;
 }
 
@@ -101,12 +113,13 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
 
 int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
     // Pesos afinables
-    const float W_REWARD     = 2.0f;
-    const float W_MOBILITY   = 0.35f;
-    const float W_TERRITORY  = 0.5f;
-    const float W_CONTESTED  = -2.0f;
-    const float W_NEAR_OPP   = -0.25f;
-    const float W_EDGE       = -0.10f;
+    const float W_REWARD       = 0.3f;
+    const float W_MOBILITY     = 0.0f;
+    const float W_TERRITORY    = 0.5f;     // Weight for territory size (cell count)
+    const float W_TERRITORY_VAL = 0.5f;    // Weight for territory total value
+    const float W_CONTESTED    = -0.5f;
+    const float W_NEAR_OPP     = -0.25f;
+    const float W_EDGE         = -0.1f;
 
     reader_lock(sync);
 
@@ -134,8 +147,10 @@ int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
         score += W_MOBILITY * (float)mob;
 
         // potencial de territorio (BFS acotado)
-        int pot = territory_potential(gs, nx, ny, /*max_depth*/5, /*max_nodes*/200);
-        score += W_TERRITORY * (float)pot;
+        int territory_value = 0;
+        int pot = territory_potential(gs, nx, ny, /*max_depth*/20, /*max_nodes*/400, &territory_value);
+        score += W_TERRITORY * (float)pot;              // Territory size (cell count)
+        score += W_TERRITORY_VAL * (float)territory_value;  // Territory total value
 
         // riesgo/contienda
         if (contested_by_opponent_1step(gs, id, nx, ny)) score += W_CONTESTED;
