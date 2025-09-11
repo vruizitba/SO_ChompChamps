@@ -175,3 +175,10 @@ make clean
 make host-all
 ./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
 exit
+make clean
+make host-all
+make host-all
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+./bin/master -w 40 -h 20 -d 20 -t 100 -p ./bin/player ./bin/player ./bin/player ./bin/player -v ./bin/view -s 123
+exit
