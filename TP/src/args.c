@@ -1,14 +1,12 @@
 #include "args.h"
 #include <unistd.h>
-#include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 int parse_args(int argc, char **argv, args_t *args) {
-    // No defaults set here - caller should initialize args
     int player_count = 0;
     int opt;
 
-    // : indica que la opción requiere argumento
     while ((opt = getopt(argc, argv, "w:h:d:t:s:v:p:")) != -1) {
         switch (opt) {
         case 'w':
@@ -30,8 +28,6 @@ int parse_args(int argc, char **argv, args_t *args) {
             args->view_path = optarg;
             break;
         case 'p':
-            // getopt solo te da el primero; los siguientes "players"
-            // hay que leerlos directamente de argv[optind...]
             args->player_paths[player_count++] = optarg;
             while (optind < argc && argv[optind][0] != '-') {
                 if (player_count >= MAX_PLAYERS) {

@@ -55,4 +55,3 @@ void writer_unlock(sync_t *s) {
     sem_post(&s->full_access_signal);
     sem_post(&s->accessor_queue_signal);
 }
-

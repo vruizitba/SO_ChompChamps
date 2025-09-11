@@ -1,7 +1,6 @@
 #include "util.h"
 #include "common.h"
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 unsigned char direction_to_char(const int direction[2]) {
@@ -48,12 +47,10 @@ bool is_valid_move(int player_pos, int new_x, int new_y, game_state_t* gs) {
     int dx = new_x - current_x;
     int dy = new_y - current_y;
     
-    // Check if movement is to an adjacent cell (including diagonals)
     if (abs(dx) > 1 || abs(dy) > 1 || (dx == 0 && dy == 0)) {
         return false;
     }
     
-    // Check if the target cell is free
     int cell_value = gs->board[new_y * gs->width + new_x];
     return is_free_cell(cell_value);
 }

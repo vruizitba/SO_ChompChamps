@@ -1,17 +1,12 @@
 #ifndef MASTER_H
 #define MASTER_H
 
-#include "common.h"
 #include "args.h"
-#include <sys/types.h>
 
 #define WIDTH_DEFAULT 10
 #define HEIGHT_DEFAULT 10
 #define DELAY_DEFAULT 200
 #define TIMEOUT_DEFAULT 10
-#define MAX_BOARD_VALUE 9
-#define MIN_BOARD_VALUE 1
-#define MAX_INT_SIZE 12 // Tamaño 12 = 10 digitos + signo + \0  | Int máximo = 2147483647 (10 digitos)
 
 /**
  * Prints the winners of the game after applying tiebreaker rules

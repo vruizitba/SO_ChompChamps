@@ -1,23 +1,30 @@
 #include "common.h"
-#include "sync.h"
 #include "util.h"
 #include "ai.h"
 #include "player.h"
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <stdio.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[]) {
     if(argc < 3){
         perror("Invalid player arguments");
         exit(1);
     }
-    unsigned short width = atoi(argv[1]);
-    unsigned short height = atoi(argv[2]);
+
+    unsigned short width = (unsigned short)atoi(argv[1]);
+    unsigned short height = (unsigned short)atoi(argv[2]);
 
     game_state_t *game_state = attach_game_state_shm_readonly();
     if(game_state == NULL) {
         perror("Failed to attach game state shared memory to player");
+        exit(1);
+    }
+
+    if (game_state->width != width || game_state->height != height) {
+        fprintf(stderr, "Player: dimension mismatch (argv %ux%u vs shm %ux%u)\n",
+                width, height, game_state->width, game_state->height);
         exit(1);
     }
 
@@ -41,12 +48,9 @@ int main(int argc, char *argv[]) {
             perror("Invalid move direction");
             continue;
         }
-        //by this point it is connected by pipe to the master
         printf("%c", dir_to_send);
         fflush(stdout);
     }
-    // When the loop ends, it means there are no more moves.
-    // Send EOF to the master by closing stdout.
     fclose(stdout);
 
     return 0;
@@ -58,5 +62,5 @@ int find_player_id(const game_state_t *gs, pid_t pid) {
             return i;
         }
     }
-    return -1; // Player not found
+    return -1;
 }

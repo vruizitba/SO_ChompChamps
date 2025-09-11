@@ -1,11 +1,9 @@
-// src/view.c
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
 #include <unistd.h>
 #include <ncurses.h>
-#include <errno.h>
 #include <string.h>
 
 #include "common.h"

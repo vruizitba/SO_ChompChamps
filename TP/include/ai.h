@@ -2,7 +2,6 @@
 #define AI_H
 
 #include "common.h"
-#include "sync.h"
 
 /**
  * Chooses the best move for a player using primitive AI logic

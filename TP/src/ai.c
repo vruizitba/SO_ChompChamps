@@ -1,10 +1,8 @@
-#include "player.h"
 #include "common.h"
 #include "util.h"
 #include "sync.h"
-#include <stdio.h>
-#include <stdlib.h>   // abs
-#include <string.h>   // memset
+#include <stdlib.h>
+#include <string.h>
 
 static int contested_by_opponent_1step(const game_state_t *gs, int me, int x, int y) {
     for (unsigned int i = 0; i < gs->num_players; ++i) {
@@ -14,7 +12,7 @@ static int contested_by_opponent_1step(const game_state_t *gs, int me, int x, in
         int dx = ox - x;
         int dy = oy - y;
         if (dx >= -1 && dx <= 1 && dy >= -1 && dy <= 1) {
-            return 1; // oponente puede llegar en 1 paso (o está ahí)
+            return 1;
         }
     }
     return 0;
@@ -34,12 +32,9 @@ static int min_chebyshev_to_opponent(const game_state_t *gs, int me, int x, int 
     return (best == 999999) ? 99 : best;
 }
 
-/* --- pequeño BFS sobre celdas libres para estimar “territorio” --- */
-
 typedef struct { int x, y, d; } qnode_t;
 
 static int hash_idx(int x, int y, int mask) {
-    // hash mezclando x,y; mask = HT-1, HT potencia de 2
     unsigned int hx = (unsigned int)x * 73856093u;
     unsigned int hy = (unsigned int)y * 19349663u;
     return (int)((hx ^ hy) & (unsigned int)mask);
@@ -47,12 +42,15 @@ static int hash_idx(int x, int y, int mask) {
 
 static int was_visited_put(int *vx, int *vy, unsigned char *used, int ht_mask, int x, int y) {
     int h = hash_idx(x, y, ht_mask);
-    for (int t = 0; t <= ht_mask; ++t) {            // como HT es pot2, recorrer al menos HT slots
+    for (int t = 0; t <= ht_mask; ++t) {
         int i = (h + t) & ht_mask;
-        if (!used[i]) { used[i] = 1; vx[i] = x; vy[i] = y; return 0; } // no estaba, lo marco
-        if (vx[i] == x && vy[i] == y) return 1;     // ya estaba visitado
+        if (!used[i]) {
+            used[i] = 1; vx[i] = x; vy[i] = y; return 0;
+        }
+        if (vx[i] == x && vy[i] == y) {
+            return 1;
+        }
     }
-    // tabla llena, consideralo visitado para cortar expansión
     return 1;
 }
 
@@ -62,15 +60,13 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
         return 0;
     }
 
-    // colas y visitados acotados para mantener O(1) memoria
-    enum { QMAX = 1024, HT = 2048 }; // HT potencia de 2
+    enum { QMAX = 1024, HT = 2048 };
     qnode_t q[QMAX];
     int head = 0, tail = 0, size = 0;
 
     int vx[HT], vy[HT]; unsigned char used[HT];
     memset(used, 0, sizeof(used));
 
-    // encolar origen
     (void)was_visited_put(vx, vy, used, HT - 1, sx, sy);
     q[tail] = (qnode_t){ sx, sy, 0 }; tail = (tail + 1) % QMAX; size++;
 
@@ -81,7 +77,6 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
         qnode_t cur = q[head]; head = (head + 1) % QMAX; size--;
         visited++;
         
-        // Accumulate the value of this cell
         int cell_value = get_cell(gs, cur.x, cur.y);
         if (is_free_cell(cell_value)) {
             value_sum += cell_value;
@@ -94,9 +89,8 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
             int ny = cur.y + DIRS[k][1];
             if (!in_bounds(gs, nx, ny)) continue;
             if (!is_free_cell(get_cell(gs, nx, ny))) continue;
-            if (was_visited_put(vx, vy, used, HT - 1, nx, ny)) continue; // ya visitado
-
-            if (size < QMAX - 1) { // si la cola se llena, paramos de expandir
+            if (was_visited_put(vx, vy, used, HT - 1, nx, ny)) continue;
+            if (size < QMAX - 1) {
                 q[tail] = (qnode_t){ nx, ny, cur.d + 1 };
                 tail = (tail + 1) % QMAX; size++;
             }
@@ -109,14 +103,11 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
     return visited;
 }
 
-/* --- IA principal --- */
-
 int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
-    // Pesos afinables
     const float W_REWARD       = 0.3f;
     const float W_MOBILITY     = 0.0f;
-    const float W_TERRITORY    = 0.5f;     // Weight for territory size (cell count)
-    const float W_TERRITORY_VAL = 0.5f;    // Weight for territory total value
+    const float W_TERRITORY    = 0.5f;
+    const float W_TERRITORY_VAL = 0.5f;
     const float W_CONTESTED    = -0.5f;
     const float W_NEAR_OPP     = -0.25f;
     const float W_EDGE         = -0.1f;
@@ -139,25 +130,20 @@ int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
 
         float score = 0.0f;
 
-        // recompensa inmediata
         score += W_REWARD * (float)v;
 
-        // movilidad local
         int mob = count_free_neighbors(gs, nx, ny);
         score += W_MOBILITY * (float)mob;
 
-        // potencial de territorio (BFS acotado)
         int territory_value = 0;
         int pot = territory_potential(gs, nx, ny, /*max_depth*/20, /*max_nodes*/400, &territory_value);
-        score += W_TERRITORY * (float)pot;              // Territory size (cell count)
-        score += W_TERRITORY_VAL * (float)territory_value;  // Territory total value
+        score += W_TERRITORY * (float)pot;
+        score += W_TERRITORY_VAL * (float)territory_value;
 
-        // riesgo/contienda
         if (contested_by_opponent_1step(gs, id, nx, ny)) score += W_CONTESTED;
         int dmin = min_chebyshev_to_opponent(gs, id, nx, ny);
         if (dmin <= 2) score += W_NEAR_OPP * (float)(3 - dmin);
 
-        // borde: penalización leve
         if (nx == 0 || ny == 0 || nx == (int)gs->width - 1 || ny == (int)gs->height - 1) {
             score += W_EDGE;
         }
@@ -196,5 +182,5 @@ int choose_best_move_naive(int *move, const game_state_t *gs, sync_t *sync, int 
         }
     }
     reader_unlock(sync);
-    return -1; // No valid moves found
+    return -1;
 }

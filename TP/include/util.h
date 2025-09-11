@@ -2,6 +2,7 @@
 #define UTIL_H
 
 #include <stdbool.h>
+#include <time.h>
 #include "common.h"
 
 static const int DIRS[8][2] = {

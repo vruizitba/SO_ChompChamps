@@ -1,23 +1,19 @@
-//
-// Created by Valentin Ruiz on 27/08/2025.
-//
+#include "master.h"
+#include "sync.h"
+#include "util.h"
+
+#define MAX_BOARD_VALUE 9
+#define MIN_BOARD_VALUE 1
+#define MAX_INT_SIZE 12 // Tamaño 12 = 10 digitos + signo + \0  | Int máximo = 2147483647 (10 digitos)
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <limits.h>
 
-#include "master.h"
-#include "sync.h"
-#include "common.h"
-#include "util.h"
-#include "args.h"
-
-// Helper: build fd_set for current turn ordering
 static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2], int num_players, int start_player) {
     FD_ZERO(read_fds);
     for (int j = 0; j < num_players; j++) {
@@ -28,17 +24,17 @@ static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2
     }
 }
 
-// Helper: process a single player's pending move if ready
 static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, int player_fd, time_t* last_successful_move_time) {
     unsigned char mov;
     ssize_t n = read(player_fd, &mov, 1);
-    if (n == 0) { // EOF -> player done
+    if (n == 0) {
         gs->players[player_idx].blocked = true;
         return;
-    } else if (n != 1) {
-        return; // ignore partial/erroneous reads
     }
-    int processed_move = mov; // 0..7 expected (players control this)
+    if (n != 1) {
+        return;
+    }
+    int processed_move = mov;
     if (processed_move < 0 || processed_move > 7) {
         gs->players[player_idx].invalids++;
         sem_post(&sync->move_signal[player_idx]);
@@ -67,17 +63,17 @@ static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, 
     sem_post(&sync->move_signal[player_idx]);
 }
 
-// Helper: timeout end condition
 static void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_t* args, time_t last_successful_move_time) {
     if (gs->finished) return;
     if (difftime(time(NULL), last_successful_move_time) > args->timeout) {
         writer_lock(sync);
-        if (!gs->finished) gs->finished = true;
+        if (!gs->finished) {
+            gs->finished = true;
+        }
         writer_unlock(sync);
     }
 }
 
-// Helper: all players blocked end condition
 static void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync) {
     if (gs->finished) return;
     int blocked = 0;
@@ -86,12 +82,13 @@ static void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync) {
     }
     if (blocked == (int)gs->num_players) {
         writer_lock(sync);
-        if (!gs->finished) gs->finished = true;
+        if (!gs->finished) {
+            gs->finished = true;
+        }
         writer_unlock(sync);
     }
 }
 
-// Helper: update view and optionally delay
 static void update_view(game_state_t* gs, sync_t* sync, const args_t* args) {
     if (args->view_path == NULL) return;
     sem_post(&sync->drawing_signal);
@@ -103,30 +100,25 @@ static void update_view(game_state_t* gs, sync_t* sync, const args_t* args) {
 }
 
 void print_winners(game_state_t* gs) {
-    int best_score = 0;
+    unsigned int best_score = 0;
     int best_players[MAX_PLAYERS], count = 0;
 
     for (unsigned int i = 0; i < gs->num_players; i++) {
         if (gs->players[i].score > best_score) {
-            // New best score, reset the list of best players
             best_score = gs->players[i].score;
             count = 0;
             best_players[count++] = i;
-        }
-        else if (gs->players[i].score == best_score) {
-            // Same score, add to the list
+        } else if (gs->players[i].score == best_score) {
             best_players[count++] = i;
         }
     }
 
-    // If there's only one winner by score
     if (count == 1) {
         printf("Winner: %s (Score: %u)\n", gs->players[best_players[0]].name, gs->players[best_players[0]].score);
         return;
     }
 
-    // Tiebreaker by valid moves
-    int min_valids = INT_MAX;
+    unsigned int min_valids = UINT_MAX;
     for (int i = 0; i < count; i++) {
         if (gs->players[best_players[i]].valids < min_valids)
             min_valids = gs->players[best_players[i]].valids;
@@ -138,7 +130,6 @@ void print_winners(game_state_t* gs) {
             tied_by_valids[tied_count++] = best_players[i];
     }
 
-    // If there's only one winner by valid moves
     if (tied_count == 1) {
         printf("Winner: %s (Score: %u, Valids: %u)\n",
                gs->players[tied_by_valids[0]].name,
@@ -147,27 +138,21 @@ void print_winners(game_state_t* gs) {
         return;
     }
 
-    // Tiebreaker by invalid moves
-    int min_invalids = INT_MAX;
+    unsigned int min_invalids = UINT_MAX;
     int final_winners[MAX_PLAYERS], final_count = 0;
 
     for (int i = 0; i < tied_count; i++) {
         int player_idx = tied_by_valids[i];
-        int player_invalids = gs->players[player_idx].invalids;
-
+        unsigned int player_invalids = gs->players[player_idx].invalids;
         if (player_invalids < min_invalids) {
-            // New minimum found, reset the list
             min_invalids = player_invalids;
             final_count = 0;
             final_winners[final_count++] = player_idx;
-        }
-        else if (player_invalids == min_invalids) {
-            // Equal to current minimum, add to the list
+        } else if (player_invalids == min_invalids) {
             final_winners[final_count++] = player_idx;
         }
     }
 
-    // If there's only one winner after all tiebreakers
     if (final_count == 1) {
         printf("Winner: %s (Score: %u, Valids: %u, Invalids: %u)\n",
                gs->players[final_winners[0]].name,
@@ -177,7 +162,6 @@ void print_winners(game_state_t* gs) {
         return;
     }
 
-    // Tie between multiple players
     printf("Tie between:\n");
     for (int i = 0; i < final_count; i++) {
         int idx = final_winners[i];
@@ -191,10 +175,9 @@ void print_winners(game_state_t* gs) {
 
 void wait_all(game_state_t* gs, pid_t view) {
     int status;
-    for (int i = 0; i < gs->num_players; i++) {
+    for (unsigned int i = 0; i < gs->num_players; i++) {
         waitpid(gs->players[i].pid, &status, 0);
     }
-
     if (view != -1) {
         waitpid(view, &status, 0);
     }
@@ -274,7 +257,6 @@ pid_t create_player_process(const char* player_path, const char* width_s, const 
         return -1;
     }
     if (pid == 0) {
-        // Child process
         if (dup2(pipe_fd[1], STDOUT_FILENO) == -1) {
             perror("dup2 player");
             _exit(1);
@@ -286,7 +268,6 @@ pid_t create_player_process(const char* player_path, const char* width_s, const 
         perror("exec player");
         _exit(1);
     }
-    // Parent process
     close(pipe_fd[1]);
     return pid;
 }
@@ -296,17 +277,13 @@ void start_view (sync_t* sync) {
     sem_wait(&sync->not_drawing_signal);
 }
 
-// New function: encapsulates the gameplay loop
 void play(game_state_t* gs, sync_t* sync, const args_t* args, int fds[][2], int num_players, int max_fd) {
-    unsigned int blocked_players = 0; // retained (not used directly now but kept for minimal diff potential)
     time_t last_successful_move_time = time(NULL);
     fd_set read_fds;
     int start_player = 0;
-
     if (args->view_path != NULL) {
         start_view(sync);
     }
-
     do {
         prepare_fd_set(&read_fds, gs, fds, num_players, start_player);
 
