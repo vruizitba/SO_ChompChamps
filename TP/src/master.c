@@ -14,13 +14,15 @@
 #include <sys/select.h>
 #include <limits.h>
 
-static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2], int num_players, int start_player) {
+static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2], int num_players, int start_player, sync_t * sync) {
     FD_ZERO(read_fds);
     for (int j = 0; j < num_players; j++) {
         int player_idx = (start_player + j) % num_players;
+        reader_lock(sync);
         if (!gs->players[player_idx].blocked) {
             FD_SET(fds[player_idx][0], read_fds);
         }
+        reader_unlock(sync);
     }
 }
 
@@ -28,20 +30,26 @@ static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, 
     unsigned char mov;
     ssize_t n = read(player_fd, &mov, 1);
     if (n == 0) {
+        reader_lock(sync);
         gs->players[player_idx].blocked = true;
+        reader_unlock(sync);
         return;
     }
     if (n != 1) {
         return;
     }
-    int processed_move = mov;
-    if (processed_move < 0 || processed_move > 7) {
+    if (mov > 7) {
+        writer_lock(sync);
         gs->players[player_idx].invalids++;
+        writer_unlock(sync);
         sem_post(&sync->move_signal[player_idx]);
         return;
     }
-    int new_x = gs->players[player_idx].x + DIRS[processed_move][0];
-    int new_y = gs->players[player_idx].y + DIRS[processed_move][1];
+
+    writer_lock(sync);
+    int new_x = gs->players[player_idx].x + DIRS[mov][0];
+    int new_y = gs->players[player_idx].y + DIRS[mov][1];
+    writer_unlock(sync);
 
     reader_lock(sync);
     bool update = is_valid_move(player_idx, new_x, new_y, gs);
@@ -64,39 +72,59 @@ static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, 
 }
 
 static void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_t* args, time_t last_successful_move_time) {
-    if (gs->finished) return;
+    reader_lock(sync);
+    bool is_finished = gs->finished;
+    reader_unlock(sync);
+
+    if (is_finished) {
+        return;
+    }
+
     if (difftime(time(NULL), last_successful_move_time) > args->timeout) {
         writer_lock(sync);
-        if (!gs->finished) {
-            gs->finished = true;
-        }
+        gs->finished = true;
         writer_unlock(sync);
     }
 }
 
 static void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync) {
-    if (gs->finished) return;
-    int blocked = 0;
-    for (unsigned i = 0; i < gs->num_players; i++) {
-        if (gs->players[i].blocked) blocked++;
+    reader_lock(sync);
+    bool is_finished = gs->finished;
+    reader_unlock(sync);
+
+    if (is_finished) {
+        return;
     }
-    if (blocked == (int)gs->num_players) {
-        writer_lock(sync);
-        if (!gs->finished) {
-            gs->finished = true;
+
+    int blocked = 0;
+    reader_lock(sync);
+    unsigned int num_players = gs->num_players;
+    for (unsigned i = 0; i < num_players; i++) {
+        if (gs->players[i].blocked) {
+            blocked++;
         }
+    }
+    reader_unlock(sync);
+
+    if (blocked == (int)num_players) {
+        writer_lock(sync);
+        gs->finished = true;
         writer_unlock(sync);
     }
 }
 
 static void update_view(game_state_t* gs, sync_t* sync, const args_t* args) {
-    if (args->view_path == NULL) return;
+    if (args->view_path == NULL) {
+        return;
+    }
     sem_post(&sync->drawing_signal);
     sem_wait(&sync->not_drawing_signal);
+    reader_lock(sync);
     if (!gs->finished) {
         struct timespec ts = { .tv_sec = args->delay / 1000, .tv_nsec = (args->delay % 1000) * 1000000L };
         nanosleep(&ts, NULL);
     }
+    reader_unlock(sync);
 }
 
 void print_winners(game_state_t* gs) {
@@ -280,12 +308,15 @@ void start_view (sync_t* sync) {
 void play(game_state_t* gs, sync_t* sync, const args_t* args, int fds[][2], int num_players, int max_fd) {
     time_t last_successful_move_time = time(NULL);
     fd_set read_fds;
+    bool is_player_blocked;
     int start_player = 0;
+
     if (args->view_path != NULL) {
         start_view(sync);
     }
+
     do {
-        prepare_fd_set(&read_fds, gs, fds, num_players, start_player);
+        prepare_fd_set(&read_fds, gs, fds, num_players, start_player, sync);
 
         int ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
         if (ready == -1) {
@@ -295,7 +326,11 @@ void play(game_state_t* gs, sync_t* sync, const args_t* args, int fds[][2], int 
 
         for (int j = 0; j < num_players; j++) {
             int player_idx = (start_player + j) % num_players;
-            if (!gs->players[player_idx].blocked && FD_ISSET(fds[player_idx][0], &read_fds)) {
+            reader_lock(sync);
+            is_player_blocked = gs->players[player_idx].blocked;
+            reader_unlock(sync);
+
+            if (!is_player_blocked && FD_ISSET(fds[player_idx][0], &read_fds)) {
                 handle_player_event(player_idx, gs, sync, fds[player_idx][0], &last_successful_move_time);
             }
         }

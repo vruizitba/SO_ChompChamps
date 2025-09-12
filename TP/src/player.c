@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "sync.h"
+
 int main(int argc, char *argv[]) {
     if(argc < 3){
         perror("Invalid player arguments");
@@ -22,20 +24,22 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    if (game_state->width != width || game_state->height != height) {
-        fprintf(stderr, "Player: dimension mismatch (argv %ux%u vs shm %ux%u)\n",
-                width, height, game_state->width, game_state->height);
-        exit(1);
-    }
-
     sync_t *sync = attach_sync_shm();
     if(sync == NULL) {
         perror("Failed to attach sync shared memory to player");
         exit(1);
     }
 
-    int id = find_player_id(game_state, getpid());
-    if(id < 0){
+    reader_lock(sync);
+    if (game_state->width != width || game_state->height != height) {
+        fprintf(stderr, "Player: dimension mismatch (argv %ux%u vs shm %ux%u)\n",
+                width, height, game_state->width, game_state->height);
+        exit(1);
+    }
+    reader_unlock(sync);
+
+    int id = find_player_id(game_state, getpid(), sync);
+    if(id < 0) {
         perror("Failed to find player id");
         exit(1);
     }
@@ -56,9 +60,13 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-int find_player_id(const game_state_t *gs, pid_t pid) {
+int find_player_id(const game_state_t *gs, pid_t pid, sync_t * sync) {
+    pid_t player_pid;
     for (unsigned int i = 0; i < MAX_PLAYERS; i++) {
-        if (gs->players[i].pid == pid) {
+        reader_lock(sync);
+        player_pid = gs->players[i].pid;
+        reader_unlock(sync);
+        if (player_pid == pid) {
             return i;
         }
     }

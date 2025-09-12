@@ -9,6 +9,6 @@
  * @param pid: process ID to search for
  * @return: player index (0 to MAX_PLAYERS-1) if found, -1 if not found
  */
-int find_player_id(const game_state_t *gs, pid_t pid);
+int find_player_id(const game_state_t *gs, pid_t pid, sync_t * sync);
 
 #endif //PLAYER_H
