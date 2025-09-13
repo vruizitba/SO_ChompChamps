@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
+
 #include "common.h"
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -31,6 +34,8 @@ game_state_t* allocate_game_state_shm(unsigned short width, unsigned short heigh
     }
     
     memset(game_state, 0, total_size);
+
+    close(shm_fd);
     
     return game_state;
 }
@@ -58,6 +63,8 @@ sync_t* allocate_sync_shm(void) {
     }
     
     sync->reader_count = 0;
+
+    close(shm_fd);
     
     return sync;
 }
@@ -80,6 +87,8 @@ game_state_t* attach_game_state_shm_readonly(void) {
         perror("mmap failed for game state attachment");
         return NULL;
     }
+
+    close(shm_fd);
     
     return game_state;
 }
@@ -98,6 +107,8 @@ sync_t* attach_sync_shm(void) {
         perror("mmap failed for sync attachment");
         return NULL;
     }
+
+    close(shm_fd);
     
     return sync;
 }

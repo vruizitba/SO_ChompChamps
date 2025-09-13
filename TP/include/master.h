@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
+
 #ifndef MASTER_H
 #define MASTER_H
 
@@ -84,5 +87,31 @@ void start_view (sync_t* sync);
  * @param max_fd: maximum file descriptor value for select()
  */
 void play(game_state_t* gs, sync_t* sync, const args_t* args, int fds[][2], int num_players, int max_fd);
+
+/**
+ * Checks if the game has timed out and marks it as finished if so
+ * @param gs: pointer to the game state
+ * @param sync: pointer to the synchronization structure
+ * @param args: pointer to the args structure with timeout setting
+ * @param last_successful_move_time: timestamp of the last successful move
+ */
+void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_t* args, time_t last_successful_move_time);
+
+/**
+ * Checks if all players are blocked and marks the game as finished if so
+ * @param gs: pointer to the game state
+ * @param sync: pointer to the synchronization structure
+ */
+void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync);
+
+/**
+ * Handles a player event (move) and updates game state accordingly
+ * @param player_idx: index of the player making the move
+ * @param gs: pointer to the game state
+ * @param sync: pointer to the synchronization structure
+ * @param player_fd: file descriptor to read the player's move from
+ * @param last_successful_move_time: pointer to timestamp of last successful move
+ */
+void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, int player_fd, time_t* last_successful_move_time);
 
 #endif //MASTER_H

@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
+
 #include "master.h"
 #include "sync.h"
 #include "util.h"
@@ -13,6 +16,7 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <limits.h>
+#include <string.h>
 
 static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2], int num_players, int start_player, sync_t * sync) {
     FD_ZERO(read_fds);
@@ -26,7 +30,7 @@ static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2
     }
 }
 
-static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, int player_fd, time_t* last_successful_move_time) {
+void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, int player_fd, time_t* last_successful_move_time) {
     unsigned char mov;
     ssize_t n = read(player_fd, &mov, 1);
     if (n == 0) {
@@ -71,7 +75,7 @@ static void handle_player_event(int player_idx, game_state_t* gs, sync_t* sync, 
     sem_post(&sync->move_signal[player_idx]);
 }
 
-static void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_t* args, time_t last_successful_move_time) {
+void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_t* args, time_t last_successful_move_time) {
     reader_lock(sync);
     bool is_finished = gs->finished;
     reader_unlock(sync);
@@ -87,7 +91,7 @@ static void check_timeout_and_finish(game_state_t* gs, sync_t* sync, const args_
     }
 }
 
-static void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync) {
+void check_all_blocked_and_finish(game_state_t* gs, sync_t* sync) {
     reader_lock(sync);
     bool is_finished = gs->finished;
     reader_unlock(sync);
@@ -254,7 +258,16 @@ void init_game_state(game_state_t* gs, args_t* args, int num_players) {
     for (int i = 0; i < num_players; i++) {
         gs->players[i].blocked = false;
         gs->players[i].invalids = 0;
-        snprintf(gs->players[i].name, sizeof(gs->players[i].name), "Player %d", i + 1);
+        
+        const char* full_path = args->player_paths[i];
+        const char* executable_name = strrchr(full_path, '/');
+        if (executable_name != NULL) {
+            executable_name++;
+        } else {
+            executable_name = full_path;
+        }
+        snprintf(gs->players[i].name, sizeof(gs->players[i].name), "%s", executable_name);
+        
         gs->players[i].score = 0;
         gs->players[i].valids = 0;
         set_valid_positions(gs, i);

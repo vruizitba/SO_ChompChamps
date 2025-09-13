@@ -1,22 +1,11 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
+
 #include "common.h"
 #include "util.h"
 #include "sync.h"
 #include <stdlib.h>
 #include <string.h>
-
-static int contested_by_opponent_1step(const game_state_t *gs, int me, int x, int y) {
-    for (unsigned int i = 0; i < gs->num_players; ++i) {
-        if ((int)i == me) continue;
-        int ox = gs->players[i].x;
-        int oy = gs->players[i].y;
-        int dx = ox - x;
-        int dy = oy - y;
-        if (dx >= -1 && dx <= 1 && dy >= -1 && dy <= 1) {
-            return 1;
-        }
-    }
-    return 0;
-}
 
 static int min_chebyshev_to_opponent(const game_state_t *gs, int me, int x, int y) {
     int best = 999999;
@@ -104,13 +93,17 @@ static int territory_potential(const game_state_t *gs, int sx, int sy, int max_d
 }
 
 int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
-    const float W_REWARD       = 0.3f;
-    const float W_MOBILITY     = 0.0f;
-    const float W_TERRITORY    = 0.5f;
-    const float W_TERRITORY_VAL = 0.5f;
-    const float W_CONTESTED    = -0.5f;
-    const float W_NEAR_OPP     = -0.25f;
-    const float W_EDGE         = -0.1f;
+    // Normalized weights that sum to 1.0
+    const float W_REWARD        = 0.15f;  // Immediate cell value
+    const float W_TERRITORY     = 0.25f;  // Territory potential 
+    const float W_TERRITORY_VAL = 0.45f;  // Territory value
+    const float W_NEAR_OPP      = 0.15f;  // Opponent proximity penalty
+    
+    // Calculate normalization constants based on actual board size
+    const float MAX_CELL_VALUE = 9.0f;
+    const float MAX_TERRITORY_NODES = (float)(gs->width * gs->height); // Entire board
+    const float MAX_TERRITORY_VALUE = MAX_TERRITORY_NODES * MAX_CELL_VALUE; // All cells with max value
+    const float MIN_OPPONENT_DIST = 1.0f;
 
     reader_lock(sync);
 
@@ -130,22 +123,22 @@ int choose_best_move(int *move, const game_state_t *gs, sync_t *sync, int id) {
 
         float score = 0.0f;
 
-        score += W_REWARD * (float)v;
-
-        int mob = count_free_neighbors(gs, nx, ny);
-        score += W_MOBILITY * (float)mob;
+        score += W_REWARD * ((float)v / MAX_CELL_VALUE);
 
         int territory_value = 0;
-        int pot = territory_potential(gs, nx, ny, /*max_depth*/20, /*max_nodes*/400, &territory_value);
-        score += W_TERRITORY * (float)pot;
-        score += W_TERRITORY_VAL * (float)territory_value;
+        int pot = territory_potential(gs, nx, ny, 20, 400, &territory_value);
+        score += W_TERRITORY * ((float)pot / MAX_TERRITORY_NODES);
+        
+        // Normalize territory value to [0, W_TERRITORY_VAL]
+        score += W_TERRITORY_VAL * ((float)territory_value / MAX_TERRITORY_VALUE);
 
-        if (contested_by_opponent_1step(gs, id, nx, ny)) score += W_CONTESTED;
+        // Normalize opponent distance penalty to [0, W_NEAR_OPP]
         int dmin = min_chebyshev_to_opponent(gs, id, nx, ny);
-        if (dmin <= 2) score += W_NEAR_OPP * (float)(3 - dmin);
-
-        if (nx == 0 || ny == 0 || nx == (int)gs->width - 1 || ny == (int)gs->height - 1) {
-            score += W_EDGE;
+        if (dmin > 0) {
+            // Invert distance so closer opponents give higher penalty
+            float proximity_factor = MIN_OPPONENT_DIST / (float)dmin;
+            if (proximity_factor > 1.0f) proximity_factor = 1.0f;
+            score -= W_NEAR_OPP * proximity_factor;
         }
 
         if (score > best_score) {

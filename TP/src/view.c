@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
+
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,7 +26,7 @@ typedef struct {
     int w_real, h_real;   // rectángulo del tablero (incluye borde)
 } layout_t;
 
-static void compute_layout(layout_t *ly, const game_state_t *gs) {
+void compute_layout(layout_t *ly, const game_state_t *gs) {
     getmaxyx(stdscr, ly->rows, ly->cols);
 
     ly->info_h = 3 + (int)gs->num_players;
@@ -60,7 +63,7 @@ static void compute_layout(layout_t *ly, const game_state_t *gs) {
 /* ========= UI / colores ========= */
 static int g_use_256 = 0;
 
-static void ui_init(void){
+void ui_init(void){
     if (!getenv("TERM")) setenv("TERM", "xterm-256color", 1);
     setlocale(LC_ALL,"");
     initscr(); cbreak(); noecho(); keypad(stdscr, TRUE); curs_set(0);
@@ -70,7 +73,7 @@ static void ui_init(void){
 #endif
     g_use_256 = (COLORS >= 256);
 }
-static void ui_end(void){ endwin(); }
+void ui_end(void){ endwin(); }
 
 /* Paleta sobria:
    - Recompensas: blanco tenue (sin amarillos/naranjas chillones).
@@ -78,7 +81,7 @@ static void ui_end(void){ endwin(); }
    - Con 256 colores: usamos índices xterm-256 para tonos oscuros/claros.
    - Fallback 8 colores: evitamos A_STANDOUT para no “apagar” el fondo.
 */
-static void init_colors(void){
+void init_colors(void){
     // Texto/estáticos
     init_pair(1,  COLOR_WHITE,   -1);          // recompensas (dim)
     init_pair(2,  COLOR_CYAN,    -1);          // títulos
