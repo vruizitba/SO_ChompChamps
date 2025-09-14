@@ -17,6 +17,19 @@
 #include <sys/select.h>
 #include <limits.h>
 #include <string.h>
+#include <errno.h>
+
+static void print_player_exit(const game_state_t* gs, int idx, int exit_code) {
+    char namebuf[sizeof(gs->players[0].name)];
+    snprintf(namebuf, sizeof(namebuf), "%s", gs->players[idx].name);
+    printf("Player %s exited (%d) with a score of %u / %u / %u\n",
+           namebuf,
+           exit_code,
+           gs->players[idx].score,
+           gs->players[idx].valids,
+           gs->players[idx].invalids);
+    fflush(stdout);
+}
 
 static void prepare_fd_set(fd_set* read_fds, const game_state_t* gs, int fds[][2], int num_players, int start_player, sync_t * sync) {
     FD_ZERO(read_fds);
@@ -206,12 +219,65 @@ void print_winners(game_state_t* gs) {
 }
 
 void wait_all(game_state_t* gs, pid_t view) {
+    int remaining = (int)gs->num_players + ((view != -1) ? 1 : 0);
     int status;
-    for (unsigned int i = 0; i < gs->num_players; i++) {
-        waitpid(gs->players[i].pid, &status, 0);
-    }
-    if (view != -1) {
-        waitpid(view, &status, 0);
+
+    bool hold_player_prints = (view != -1);
+    int buf_idx[MAX_PLAYERS];
+    int buf_exit[MAX_PLAYERS];
+    int buf_count = 0;
+
+    while (remaining > 0) {
+        pid_t pid = wait(&status);
+        if (pid == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        remaining--;
+
+        int exit_code = 0;
+        if (WIFEXITED(status)) {
+            exit_code = WEXITSTATUS(status);
+        } else if (WIFSIGNALED(status)) {
+            exit_code = 128 + WTERMSIG(status);
+        }
+
+        if (view != -1 && pid == view) {
+            printf("View exited (%d)\n", exit_code);
+            fflush(stdout);
+            hold_player_prints = false;
+            for (int b = 0; b < buf_count; ++b) {
+                int idx = buf_idx[b];
+                print_player_exit(gs, idx, buf_exit[b]);
+            }
+            buf_count = 0;
+            continue;
+        }
+
+        int idx = -1;
+        bool found = false;
+        for (unsigned int i = 0; i < gs->num_players && !found; i++) {
+            if (gs->players[i].pid == pid) {
+                idx = (int)i;
+                found = true;
+            }
+        }
+
+        if (idx >= 0) {
+            if (hold_player_prints) {
+                if (buf_count < MAX_PLAYERS) {
+                    buf_idx[buf_count] = idx;
+                    buf_exit[buf_count] = exit_code;
+                    buf_count++;
+                } else {
+                    print_player_exit(gs, idx, exit_code);
+                }
+            } else {
+                print_player_exit(gs, idx, exit_code);
+            }
+        }
     }
 }
 
@@ -266,7 +332,7 @@ void init_game_state(game_state_t* gs, args_t* args, int num_players) {
         } else {
             executable_name = full_path;
         }
-        snprintf(gs->players[i].name, sizeof(gs->players[i].name), "%s", executable_name);
+        snprintf(gs->players[i].name, sizeof(gs->players[i].name), "%s - P%d", executable_name, i + 1);
         
         gs->players[i].score = 0;
         gs->players[i].valids = 0;
