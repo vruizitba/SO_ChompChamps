@@ -2,7 +2,7 @@
 IMG   := agodio/itba-so-multi-platform:3.0
 NAME  := os-ram
 MOUNT := /root
-WORK  := $(MOUNT)    # compilo en /root (tu carpeta está montada ahí)
+WORK  := $(MOUNT)    # compilo en /root
 
 CC      := gcc
 CSTD    := -std=c99
@@ -10,7 +10,7 @@ OPT     := -O2
 WARN    := -Wall -Wextra -pedantic
 CPPFLAGS:= -Iinclude
 CFLAGS  := $(CSTD) $(OPT) $(WARN) $(CPPFLAGS)
-LDLIBS  := -pthread -lrt
+LDLIBS  := -pthread -lrt -lm
 NCURSES := -lncurses
 
 SRC_DIR := src
@@ -25,7 +25,7 @@ MASTER_BIN := $(OUT_DIR)/master
 PLAYER_BIN := $(OUT_DIR)/player
 VIEW_BIN   := $(OUT_DIR)/view
 
-# ========= Targets de alto nivel (siempre en host) =========
+# ========= Targets de alto nivel =========
 .PHONY: all master player view clean docker-pull docker-start host-all host-master host-player host-view
 
 all: master player view
@@ -53,7 +53,7 @@ docker-pull:
 docker-start:
 	docker start $(NAME)
 
-# ========= Reglas "host-" (se ejecutan dentro del container) =========
+# ========= Reglas "host-" =========
 # -> NO llaman a docker; compilan nativo usando gcc del container
 host-all: host-master host-player host-view
 

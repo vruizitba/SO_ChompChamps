@@ -1,6 +1,3 @@
-// This is a personal academic project. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
-
 #include "master.h"
 #include "sync.h"
 #include "util.h"
@@ -18,6 +15,7 @@
 #include <limits.h>
 #include <string.h>
 #include <errno.h>
+#include <math.h>
 
 static void print_player_exit(const game_state_t* gs, int idx, int exit_code) {
     char namebuf[sizeof(gs->players[0].name)];
@@ -282,11 +280,57 @@ void wait_all(game_state_t* gs, pid_t view) {
 }
 
 void set_valid_positions(game_state_t* gs, int player_pos) {
-    int x, y;
-    do {
-        x = rand() % gs->width;
-        y = rand() % gs->height;
-    } while (!is_free_cell(gs->board[x + y * gs->width]));
+    int n = (int)gs->num_players;
+
+    int cols = (int)ceil(sqrt((double)n));
+    if (cols < 1) {
+        cols = 1;
+    }
+    int rows = (n + cols - 1) / cols;
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    int cell_w = gs->width / cols;
+    int cell_h = gs->height / rows;
+    if (cell_w < 1) {
+        cell_w = 1;
+    }
+    if (cell_h < 1) {
+        cell_h = 1;
+    }
+
+    int row = player_pos / cols;
+    int col = player_pos % cols;
+    if (row >= rows) {
+        row = rows - 1;
+    }
+
+    int x = col * cell_w + cell_w / 2;
+    int y = row * cell_h + cell_h / 2;
+
+    if (x >= gs->width) {
+        x = gs->width - 1;
+    }
+    if (y >= gs->height) {
+        y = gs->height - 1;
+    }
+
+    int idx = x + y * gs->width;
+    if (!is_free_cell(gs->board[idx])) {
+        bool placed = false;
+        for (int offset = 0; offset < gs->width * gs->height && !placed; offset++) {
+            int xx = (x + offset) % gs->width;
+            int yy = (y + (x + offset) / gs->width) % gs->height;
+            int id = xx + yy * gs->width;
+            if (is_free_cell(gs->board[id])) {
+                x = xx;
+                y = yy;
+                placed = true;
+            }
+        }
+    }
+
     gs->players[player_pos].x = x;
     gs->players[player_pos].y = y;
     gs->board[x + y * gs->width] = -player_pos;

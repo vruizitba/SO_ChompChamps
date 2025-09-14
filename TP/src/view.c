@@ -1,6 +1,3 @@
-// This is a personal academic project. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
-
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,14 +40,12 @@ void compute_layout(layout_t *ly, const game_state_t *gs) {
     if (ly->xmul < 1) ly->xmul = 1;
     if (ly->ymul < 1) ly->ymul = 1;
 
-    // celdas más grandes que antes
     if (ly->xmul > 6) ly->xmul = 6;
     if (ly->ymul > 3) ly->ymul = 3;
 
     ly->w_real = (int)gs->width * ly->xmul + 2;
     ly->h_real = (int)gs->height * ly->ymul + 2;
 
-    // centrar
     ly->board_x = (ly->cols - ly->w_real) / 2;
     if (ly->board_x < 0) ly->board_x = 0;
     ly->board_y = ly->info_h;
@@ -164,7 +159,7 @@ static void fill_cell_rect(const layout_t *ly, int cx, int cy, int pair, chtype 
     int sx = ly->board_x + 1 + cx * ly->xmul;
     int sy = ly->board_y + 1 + cy * ly->ymul;
 
-    if (emphasize_bold) attron(A_BOLD);          // NO usamos A_STANDOUT (apaga el bg en algunas TTY)
+    if (emphasize_bold) attron(A_BOLD);
     attron(COLOR_PAIR(pair));
 
     for (int r=0; r<ly->ymul; r++){
@@ -194,7 +189,7 @@ static void draw_board(const layout_t *ly, const game_state_t *gs){
             }
         }
     }
-    // cabezas (rellenas, mismo tono pero más vivo/saturado)
+    // cabezas
     for (unsigned i=0; i<gs->num_players; i++){
         int px = gs->players[i].x, py = gs->players[i].y;
         if (!in_bounds(gs, px, py)) continue;
