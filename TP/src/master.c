@@ -291,25 +291,28 @@ pid_t create_view_process(const char* view_path, const char* width_s, const char
     return pid;
 }
 
-pid_t create_player_process(const char* player_path, const char* width_s, const char* height_s, int pipe_fd[2]) {
+pid_t create_player_process(const char* player_path, const char* width_s, const char* height_s, int fds[MAX_PLAYERS][2], int player_idx) {
     pid_t pid = fork();
     if (pid < 0) {
         perror("fork player");
         return -1;
     }
     if (pid == 0) {
-        if (dup2(pipe_fd[1], STDOUT_FILENO) == -1) {
+        for (int i = 0; i < player_idx; i++) {
+            close(fds[i][0]);
+        }
+        if (dup2(fds[player_idx][1], STDOUT_FILENO) == -1) {
             perror("dup2 player");
             _exit(1);
         }
-        close(pipe_fd[0]);
-        close(pipe_fd[1]);
+        close(fds[player_idx][0]);
+        close(fds[player_idx][1]);
         char *argv[] = { (char*)player_path, (char*)width_s, (char*)height_s, NULL };
         execve(player_path, argv, NULL);
         perror("exec player");
         _exit(1);
     }
-    close(pipe_fd[1]);
+    close(fds[player_idx][1]);
     return pid;
 }
 
@@ -400,7 +403,8 @@ int main(int argc, char *argv[]) {
             perror("pipe");
             exit(1);
         }
-        pid_t pid_p = create_player_process(args.player_paths[i], width_s, height_s, fds[i]);
+        
+        pid_t pid_p = create_player_process(args.player_paths[i], width_s, height_s, fds, i);
         if (pid_p < 0) {
             fprintf(stderr, "Failed to create player process %d\n", i);
             exit(1);

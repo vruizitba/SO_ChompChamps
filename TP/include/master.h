@@ -69,7 +69,7 @@ pid_t create_view_process(const char* view_path, const char* width_s, const char
  * @param pipe_fd: array of two integers representing the pipe file descriptors (pipe_fd[0] for reading, pipe_fd[1] for writing)
  * @return PID of the created player process, or -1 on failure
  */
-pid_t create_player_process(const char* player_path, const char* width_s, const char* height_s, int pipe_fd[2]);
+pid_t create_player_process(const char* player_path, const char* width_s, const char* height_s, int pipe_fd[MAX_PLAYERS][2], int player_idx);
 
 /**
  * Starts the view process by signaling it to begin drawing
